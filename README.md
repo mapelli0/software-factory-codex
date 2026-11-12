@@ -39,7 +39,7 @@ Run the following from the application repository root and open the [local dashb
 python -m http.server --bind 127.0.0.1 --directory factory
 ```
 
-The dashboard displays job artifacts and check output. The [historical examples](examples/jobs) show what the workflow records. See [DESIGN.md](DESIGN.md) for how the factory works.
+The dashboard displays job artifacts and check output. The [historical examples](examples/jobs) show what the workflow records. See [DESIGN.md](DESIGN.md) for the runtime and the [migration plan](CODEX-MIGRATION-PLAN.md) for the porting decisions and pending verification.
 
 ## Thanks and license
 
