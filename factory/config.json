@@ -1,0 +1,52 @@
+{
+  "concurrency": 3,
+  "max_rounds": 3,
+  "base_branch": "main",
+  "labels": {
+    "queue": "factory",
+    "needs_info": "factory:needs-info",
+    "needs_human": "factory:needs-human"
+  },
+  "routing": {
+    "low": {
+      "code": "default"
+    },
+    "medium": {
+      "code": "default"
+    },
+    "high": {
+      "code": "default"
+    }
+  },
+  "surface_reviewers": {
+    "ui": {
+      "ux": "default",
+      "ui": "default"
+    },
+    "security": {
+      "security": "default"
+    }
+  },
+  "protected_paths": [
+    "factory/checks.sh",
+    "factory/config.json",
+    "factory/checks.ps1",
+    "factory/bin/*",
+    ".agents/skills/factory/*",
+    ".codex/*"
+  ],
+  "ports": {
+    "base": 5100,
+    "step": 10
+  },
+  "checks": {
+    "windows": {
+      "shell": "pwsh",
+      "script": "checks.ps1"
+    },
+    "linux": {
+      "shell": "bash",
+      "script": "checks.sh"
+    }
+  }
+}
