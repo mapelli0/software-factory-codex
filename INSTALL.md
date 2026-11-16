@@ -1,15 +1,35 @@
-# Install the factory in a project
+# Install the factory beside an application checkout
 
-Use this guide from the root of the **application repository** where the factory will run. If Codex is installing it from GitHub, use [mapelli0/software-factory-codex](https://github.com/mapelli0/software-factory-codex) as the source. Copy the factory files into the current repository and merge them with existing project configuration.
+Use [mapelli0/software-factory-codex](https://github.com/mapelli0/software-factory-codex) as the source for the factory files.
 
-1. In the project root, verify Git, a committed HEAD, Python 3.11+ and a Codex client with custom subagents. GitHub mode also requires a GitHub remote and authenticated `gh`. Use PowerShell 7 on native Windows or Bash on Linux. The target's .NET and frontend toolchains must match its CI. For UI jobs, verify the project's browser tooling and local launch commands.
-2. Copy `.agents/skills/factory/`, the nine profiles under `.codex/agents/` and `factory/` from this template. Merge the factory settings from `.codex/config.toml` with any existing configuration. Preserve existing project instructions and license notices. Include this port's GPLv3 license alongside the copied factory files as `factory/LICENSE` and retain the upstream attribution.
-3. Set `base_branch` to the project's actual base branch and configure the three factory label names, limits and review routing in `factory/config.json`. Create the labels if using GitHub mode. Use a different port base if the configured range conflicts with an existing service.
-4. Configure `factory/checks.ps1` for Windows or `factory/checks.sh` for Linux and WSL. Fill in both for projects that use both OSes. Keep validation equivalent across platforms and preserve exit codes. When editing `checks.ps1`, check `$LASTEXITCODE` immediately after each native command. The shipped placeholders fail until the target has checks.
-5. In the target's `AGENTS.md`, document the actual setup, validation and preview commands. Include the solution or project and pinned .NET SDK for C#. For React, document the Node version, workspace, package manager and scripts. For mixed apps, document how to assign separate frontend and backend ports, point the frontend at that backend, and stop the processes started for preview. Use CI's non-interactive checks. A typical SDK-style .NET baseline is restore, Release build and Release tests. A frontend job uses the existing locked dependency install and lint, typecheck, tests and production build where configured. For other UI stacks, document their actual test and preview workflow.
-6. Add `/factory/jobs/`, `/.worktrees/` and `__pycache__/` to the target's ignore file. Verify the skill and agent files are tracked. Check the platform launcher with `python factory/bin/gate --preflight .` and, for GitHub mode, the queue with `python factory/bin/job queue`. The queue can reconcile prior PRs and update local job state. If the target has no previous jobs, it simply lists labeled issues.
-7. Publish the installed files to the configured base branch through the project's usual review process. Start a disposable pilot with one job slot and one small labeled issue. Open Codex at the repository root and use `$factory run <issue>`. Verify that the factory leaves a review-ready PR open for the operator to merge through GitHub.
+## Choose two folders
 
-For a disconnected pilot, choose disconnected on initialization, discuss the requirement in chat, then send `/factory execute` or `$factory execute`. Verify the result is a local branch. After a local merge that retains the job commit, ask the factory to record completion. Project checks may need cached dependencies or the package feeds configured by the project.
+Before creating or changing files, ask the operator for both paths and wait for their answers.
 
-If a run was interrupted, confirm its workers have stopped, then ask the factory to recover ownership and resume. Keep the checkout, interpreters and runtime state in the same OS environment for the duration of the run.
+1. Which folder contains the application code? Choose the root of an existing Git checkout with a committed HEAD.
+2. Where should the factory be installed? Choose a separate folder, such as a sibling of the application checkout.
+
+Resolve both paths. The folders must be distinct and neither can contain the other. Use one factory directory per application checkout. Keep the skill, agent profiles, checks, dashboard, job files and linked worktrees in the factory folder.
+
+## Set up the factory
+
+1. Verify Git, Python 3.11+, and a Codex client with custom subagents. Use PowerShell 7 on native Windows or Bash on Linux or WSL. For GitHub mode, the **application checkout** needs a GitHub `origin`, an authenticated `gh` with access to that repository, and the configured factory labels. Disconnected mode can use a checkout without a remote.
+2. In the factory folder, copy `.agents/skills/factory/`, the nine profiles under `.codex/agents/`, `factory/`, `AGENTS.md`, `INSTALL.md` and `LICENSE`. Merge `.codex/config.toml` and the factory ignore rules into that folder's existing configuration. Preserve existing instructions and license notices. If using a fresh clone of the factory repository as the installation, the template files are already there.
+3. From the factory folder, bind it to the chosen application checkout. The binding is stored locally in `.factory-project.local.json`.
+
+   ```powershell
+   python factory/bin/job configure "C:\path to\application"
+   python factory/bin/job project
+   ```
+
+4. In the **factory folder**, configure `factory/config.json` using the application's GitHub base branch and label names when applicable. Fill in `factory/checks.ps1` for Windows or `factory/checks.sh` for Linux/WSL using the application's actual CI commands. The scripts run with the application checkout or linked worktree as their working directory. Keep checks non-interactive, preserve exit codes, and check `$LASTEXITCODE` immediately after native commands in PowerShell.
+5. Record any missing setup, validation and preview instructions in `PROJECT.local.md` in the factory directory. Use existing application instructions and CI as sources. For C#/.NET, record the SDK and solution or project. For React, record the Node version, workspace, package manager and relevant scripts. For mixed apps, document how the frontend talks to the backend on the job's ports. Keep machine-specific configuration, job files, and worktrees ignored as specified by the factory's `.gitignore`.
+6. From the factory folder, run `python factory/bin/gate --preflight`. This tests the selected application checkout without writing a job verdict. In GitHub mode, use `python factory/bin/job queue` to verify the application's queue. The queue can reconcile old jobs when state already exists.
+
+## Start Codex from the factory folder
+
+Open the **factory folder** in Codex so it loads the factory skill and agents. Give the session access to the application checkout as well so it can read the code and Git can register linked worktrees. Application code changes happen in the linked worktrees under the factory directory. The application's normal working tree does not receive a factory install, checks, skill files or ignore rules.
+
+Use `$factory` to choose GitHub or disconnected mode. For GitHub, start with one labeled test issue using `$factory run <issue>`. For disconnected mode, describe the task in chat and send `/factory execute` or `$factory execute`. Verify the result is a PR or local branch for human merge.
+
+For an existing bundled installation, finish or archive old jobs in place, then configure a fresh separate factory folder. Keep the original job files with that installation so they can still be resumed there. A separate installation with existing job state stays bound to its original application.

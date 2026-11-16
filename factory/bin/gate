@@ -4,11 +4,10 @@
 Usage:
   gate <job-id>            write round-N/checks.md; exit 0 on PASS, 1 on FAIL
   gate <job-id> --merge    same, as round-N/merge-checks.md (job ready runs it)
-  gate --preflight <path>  run the platform checks in a worktree without writing a verdict
+  gate --preflight [path]  run checks in the application checkout or the specified worktree
 
-The gate runs the main checkout's configured platform checks inside the job's worktree,
-so a branch can't change the checks it is judged by. It also fails when the
-branch changes a file matching config.json `protected_paths`
+The gate runs checks from the factory installation with the worktree as its
+working directory. It fails if the branch changes a file matching `protected_paths` in config.json.
 (fnmatch patterns, where `*` also matches `/`).
 """
 
@@ -19,10 +18,9 @@ import sys
 import time
 from pathlib import Path
 
-from runtime import run_checks as run_platform_checks
+from runtime import check_job_checkout, project_checkout, run_checks as run_platform_checks
 
-REPO = Path(__file__).resolve().parents[2]
-FACTORY = REPO / "factory"
+FACTORY = Path(__file__).resolve().parents[1]
 CONFIG = json.loads((FACTORY / "config.json").read_text(encoding="utf-8"))
 TAIL = 80
 
@@ -66,6 +64,7 @@ def gate(job_id, merge):
     if not job_id or any(c not in "0123456789abcdefghijklmnopqrstuvwxyz-" for c in job_id):
         die("invalid job ID")
     job = json.loads((FACTORY / "jobs" / job_id / "job.json").read_text(encoding="utf-8"))
+    check_job_checkout(FACTORY, project_checkout(FACTORY), job)
     worktree = job["worktree"]
     if job["round"] < 1:
         die(f"{job_id} hasn't started a build round")
@@ -102,8 +101,9 @@ def gate(job_id, merge):
 
 
 def main(argv):
-    if len(argv) == 2 and argv[0] == "--preflight":
-        code, log, _ = run_checks(Path(argv[1]).resolve())
+    if argv and argv[0] == "--preflight" and len(argv) <= 2:
+        checkout = Path(argv[1]).resolve() if len(argv) == 2 else project_checkout(FACTORY)
+        code, log, _ = run_checks(checkout)
         print(log, end="")
         sys.exit(code)
     elif len(argv) == 1 and not argv[0].startswith("-"):
@@ -117,4 +117,7 @@ def main(argv):
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-    main(sys.argv[1:])
+    try:
+        main(sys.argv[1:])
+    except (OSError, ValueError) as error:
+        die(str(error))

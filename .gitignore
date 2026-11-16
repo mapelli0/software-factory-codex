@@ -1,3 +1,6 @@
 /factory/jobs/
+/.factory-project.local.json
+/.factory-project.local.tmp
+/PROJECT.local.md
 /.worktrees/
 __pycache__/

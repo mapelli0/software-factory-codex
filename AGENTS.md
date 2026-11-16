@@ -1,5 +1,7 @@
-# Software factory template
+# Software factory
 
-Install this template into an application repository using [INSTALL.md](INSTALL.md). Start Codex from the installed project's root and invoke `$factory` and choose GitHub or disconnected intake. In disconnected mode, collect the brief in chat and wait for `/factory execute` or `$factory execute` before starting the job. Keep application setup, validation and preview commands in that project's instructions.
+For a new installation, follow [INSTALL.md](INSTALL.md) and collect the paths of the application checkout and the separate factory folder. Start Codex from the factory folder and invoke `$factory`. The binding from `python factory/bin/job project` identifies the application checkout.
 
-The Python entry points are `factory/bin/job`, `factory/bin/gate` and `factory/bin/route`. Run them through Python on both platforms. The check placeholders in this template are intentionally incomplete until an application is installed. Job state belongs in `factory/jobs/` and worktrees in `.worktrees/`. The operator merges through GitHub or locally, according to the job mode.
+Use existing application instructions and the factory's optional `PROJECT.local.md` for setup, validation and preview. The Python entry points are `factory/bin/job`, `factory/bin/gate` and `factory/bin/route`. Job files and linked worktrees live in `factory/jobs/` and `.worktrees/` under this installation. The operator merges through GitHub or locally.
+
+Disconnected intake collects a brief in chat. Start the job only after `/factory execute` or `$factory execute`.

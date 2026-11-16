@@ -4,17 +4,18 @@ A Windows-first port of the ZazenCodes Software Factory v2 for Claude Code. It u
 
 ## Install by pointing Codex at this repo
 
-Open Codex in the **application repository** where you want the factory, then paste this prompt.
+Paste this prompt into Codex. Choose the application checkout and the folder that will contain its separate factory installation.
 
 ```text
-Install Software Factory for Codex in the current repository using
+Install Software Factory for Codex using
 https://github.com/mapelli0/software-factory-codex.git
 
-Read INSTALL.md in that repository and follow it. Copy the factory skill,
-agent profiles and runtime into this project. Merge the factory settings
-with any existing Codex configuration and project instructions.
+Read INSTALL.md and ask me for two folders before writing files:
+where the application code lives and where to install the factory.
+Copy the factory files into the separate factory directory and bind it
+to the application checkout. Leave the application's files as they are.
 
-Configure the Windows PowerShell checks using this project's CI commands.
+Configure the factory's Windows PowerShell checks using the application's CI commands.
 Use its existing .NET SDK, solution, frontend workspace and package manager
 where applicable. Run the factory preflight and show me what changed, the
 checks that ran, and how to start my first job.
@@ -24,7 +25,7 @@ Use Git, a committed checkout, Python 3.11 or later, PowerShell 7 and a Codex cl
 
 ## Start a job
 
-Enter `$factory` and choose a mode.
+Open the factory directory in Codex, enter `$factory` and choose a mode. Its jobs, checks, dashboard and linked worktrees live with the factory.
 
 - **GitHub.** Label an open issue `factory`, then enter `$factory run 42` for issue 42 or `$factory run` for the queue. The factory builds and reviews the change and hands you a PR to merge.
 - **Disconnected.** Describe the request in chat. The intake agent helps scope it and waits for `/factory execute` or `$factory execute`. The factory uses the conversation as the issue brief and hands you a local branch. A GitHub remote is optional in this mode.
@@ -33,7 +34,7 @@ Use `$factory status` to see progress and what needs your attention. You can giv
 
 ## Local dashboard
 
-Run the following from the application repository root and open the [local dashboard](http://127.0.0.1:8000/dashboard.html).
+Run the following from the factory directory and open the [local dashboard](http://127.0.0.1:8000/dashboard.html).
 
 ```powershell
 python -m http.server --bind 127.0.0.1 --directory factory

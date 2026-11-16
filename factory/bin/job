@@ -7,6 +7,8 @@ it and refuses anything else. GitHub side effects that belong to a transition
 orchestrator never improvises them.
 
 Usage:
+  job configure <checkout>       bind the factory to a separate application checkout
+  job project                    print the selected application checkout
   job queue                      what $factory run should do with each labeled issue
   job create <issue>             new job for an open labeled GitHub issue
   job create-local <title>       new disconnected job from a conversation brief on stdin
@@ -33,10 +35,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from runtime import exclusive_lock
+from runtime import PROJECT_FILE, check_job_checkout, exclusive_lock, project_checkout, validate_project
 
-REPO = Path(__file__).resolve().parents[2]
-FACTORY = REPO / "factory"
+FACTORY = Path(__file__).resolve().parents[1]
+WORKTREES = FACTORY.parent / ".worktrees"
 JOBS = FACTORY / "jobs"
 OWNER = JOBS / ".owner"
 BIN = FACTORY / "bin"
@@ -76,8 +78,9 @@ def now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def run(cmd, cwd=REPO, check=True):
-    res = subprocess.run(cmd, cwd=cwd, capture_output=True, encoding="utf-8", errors="replace")
+def run(cmd, cwd=None, check=True):
+    checkout = project_checkout(FACTORY) if cwd is None else cwd
+    res = subprocess.run(cmd, cwd=checkout, capture_output=True, encoding="utf-8", errors="replace")
     if check and res.returncode != 0:
         raise Refused(f"`{' '.join(cmd)}` failed: {(res.stderr or res.stdout).strip()}")
     return res
@@ -115,7 +118,23 @@ def load(job_id):
     path = job_dir(job_id) / "job.json"
     if not path.exists():
         die(f"no job {job_id}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    job = json.loads(path.read_text(encoding="utf-8"))
+    check_job_checkout(FACTORY, project_checkout(FACTORY), job)
+    return job
+
+
+def configure(checkout):
+    project = validate_project(FACTORY, checkout)
+    binding = FACTORY.parent / PROJECT_FILE
+    if binding.exists() and project_checkout(FACTORY) == project:
+        print(project)
+        return
+    require(not any(JOBS.glob("*/job.json")) and not any(WORKTREES.glob("*")),
+            "this factory already has jobs or worktrees; use a new factory directory")
+    temporary = binding.with_suffix(".tmp")
+    temporary.write_text(json.dumps({"checkout": str(project)}, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(binding)
+    print(project)
 
 
 def save(job):
@@ -555,7 +574,8 @@ def new_job(title, issue=None, issue_url=None):
     return {
         "id": job_id, "issue": issue, "title": title, "issue_url": issue_url,
         "pr": None, "pr_url": None, "mode": "github" if issue is not None else "disconnected",
-        "branch": f"factory/{job_id}", "worktree": str(REPO / ".worktrees" / job_id),
+        "branch": f"factory/{job_id}", "worktree": str(WORKTREES / job_id),
+        "project_checkout": str(project_checkout(FACTORY)),
         "stage": "intake", "round": 0, "round_limit": CONFIG["max_rounds"],
         "intake": None, "agents": None, "gate": None, "reviews": {},
         "cost_usd": None, "started": now(), "ended": None,
@@ -770,7 +790,9 @@ def cmd_summary(args):
 def dispatch(argv):
     cmd, args = argv[0], argv[1:]
     try:
-        if cmd == "queue" and not args:
+        if cmd == "configure" and len(args) == 1:
+            configure(args[0])
+        elif cmd == "queue" and not args:
             cmd_queue()
         elif cmd == "create" and len(args) == 1 and args[0].isdigit():
             cmd_create(args[0])
@@ -815,6 +837,9 @@ def main(argv):
     token = None
     if len(argv) >= 3 and argv[0] == "--run":
         token, argv = argv[1], argv[2:]
+    if argv == ["project"]:
+        print(project_checkout(FACTORY))
+        return
     if argv[0] == "summary":
         cmd_summary(argv[1:])
         return
@@ -843,5 +868,5 @@ if __name__ == "__main__":
     sys.stderr.reconfigure(encoding="utf-8")
     try:
         main(sys.argv[1:])
-    except (OSError, Refused) as error:
+    except (OSError, Refused, ValueError) as error:
         die(str(error))
