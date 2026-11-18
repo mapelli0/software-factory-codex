@@ -8,7 +8,8 @@ Codex discovers `.agents/skills/factory/SKILL.md` and the nine custom agents und
 | `factory/bin/route` | Select code review and the UX, UI or security lenses based on intake risk and surfaces. A `default` model entry uses the client's defaults. |
 | `factory/bin/gate` | Run the configured checks from the worktree and record the result, commit and merge base. Verify protected paths. |
 | `factory/bin/runtime.py` | Select PowerShell and Windows file locking, or Bash and POSIX file locking. |
-| `factory/dashboard.html` | Show job state, review rounds, handoffs and job artifacts. |
+| `factory/bin/dashboard.py` | Start or reuse a loopback server for the dashboard and job artifacts. |
+| `factory/dashboard.html` | Show live job state, review rounds, handoffs and job artifacts. |
 
 ## Workflow
 

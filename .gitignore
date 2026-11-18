@@ -1,5 +1,6 @@
 /factory/jobs/
 /.factory-project.local.json
+/.factory-dashboard.local.*
 /.factory-project.local.tmp
 /PROJECT.local.md
 /.worktrees/

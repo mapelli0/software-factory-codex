@@ -16,7 +16,7 @@ Usage:
   job complete-local <job>      record a human merge present in the main checkout
   job advance <job> <stage>      move a job to <stage>, or refuse
   job ready <job>                APPROVE → sync, final gate, hand off the PR
-  job claim [--recover]          claim the orchestrator slot, returning a token
+  job claim [--recover] [--dashboard]   claim the run; optionally start the live dashboard
   job --run <token> release      release the orchestrator slot
   job feedback <job>             needs-human → build, with your feedback (stdin) as feedback-<k>.md
   job reject <job>               needs-info or needs-human → rejected, with your reason (stdin) as rejection.md
@@ -845,11 +845,18 @@ def main(argv):
         return
     with exclusive_lock(JOBS / ".lock"):
         owner = OWNER.read_text(encoding="utf-8").strip() if OWNER.exists() else None
-        if argv in (["claim"], ["claim", "--recover"]):
-            if owner and argv == ["claim"]:
+        if argv[0] == "claim" and set(argv[1:]) <= {"--recover", "--dashboard"}:
+            if owner and "--recover" not in argv:
                 die("a factory run already owns this checkout")
             token = uuid4().hex
             OWNER.write_text(token)
+            if "--dashboard" in argv:
+                from dashboard import start
+
+                try:
+                    print(f"Live dashboard: {start()}", file=sys.stderr)
+                except OSError as error:
+                    print(f"dashboard: {error}", file=sys.stderr)
             print(token)
             return
         if owner and token != owner:

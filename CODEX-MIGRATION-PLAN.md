@@ -2,7 +2,7 @@
 
 ## Scope and target
 
-Port the template in [software-factory-claude-code-v2](https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2) to the standalone `software-factory-codex` workspace. The source is a template inside the ZazenCodes repository. The installer now asks for the application checkout and a separate factory directory. Start Codex from that factory directory so it discovers the skill and agent profiles. The factory stores its binding locally and keeps its tools, checks, job state and worktrees outside the application checkout.
+Port the template in [software-factory-claude-code-v2](https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2) to the standalone `software-factory-codex` workspace. The source is a template inside the ZazenCodes repository. The installer defaults to the current local Codex project's primary folder when suitable and asks for the application checkout if needed. Start Codex from that factory directory so it discovers the skill and agent profiles. The factory stores its binding locally and keeps its tools, checks, job state and worktrees outside the application checkout.
 
 Treat C#/.NET as the primary backend stack and React as the first supported UI stack. Cover backend-only, UI-only and mixed repositories, with the same install contract for other UI stacks.
 

@@ -2,14 +2,15 @@
 
 Use [mapelli0/software-factory-codex](https://github.com/mapelli0/software-factory-codex) as the source for the factory files.
 
-## Choose two folders
+## Choose the installation folder
 
-Before creating or changing files, ask the operator for both paths and wait for their answers.
+Use the current local Codex project's primary folder as the default factory directory. Show the resolved destination before writing files. Honor a different destination the operator supplies.
 
-1. Which folder contains the application code? Choose the root of an existing Git checkout with a committed HEAD.
-2. Where should the factory be installed? Choose a separate folder, such as a sibling of the application checkout.
+Ask which folder contains the application code if it has not been supplied or saved in an existing factory binding. It must be the root of a Git checkout with a committed HEAD. If several attached folders could be the application, ask which one to use.
 
-Resolve both paths. The folders must be distinct and neither can contain the other. Use one factory directory per application checkout. Keep the skill, agent profiles, checks, dashboard, job files and linked worktrees in the factory folder.
+Ask for a factory directory if the current project has no clear, permanent local primary folder, or the active chat runs in a temporary worktree. The factory and application directories must be distinct and neither can contain the other. If the default overlaps the application, suggest a sibling folder and ask the operator to choose a separate destination before writing.
+
+Use one installation per application. Preserve existing factory files and configuration when updating an installation. Keep any saved application binding and job state together.
 
 ## Set up the factory
 
@@ -30,6 +31,6 @@ Resolve both paths. The folders must be distinct and neither can contain the oth
 
 Open the **factory folder** in Codex so it loads the factory skill and agents. Give the session access to the application checkout as well so it can read the code and Git can register linked worktrees. Application code changes happen in the linked worktrees under the factory directory. The application's normal working tree does not receive a factory install, checks, skill files or ignore rules.
 
-Use `$factory` to choose GitHub or disconnected mode. For GitHub, start with one labeled test issue using `$factory run <issue>`. For disconnected mode, describe the task in chat and send `/factory execute` or `$factory execute`. Verify the result is a PR or local branch for human merge.
+Use `$factory` to choose GitHub or disconnected mode. For GitHub, start with one labeled test issue using `$factory run <issue>`. For disconnected mode, describe the task in chat and send `/factory execute` or `$factory execute`. When a run starts, open the local dashboard link printed in chat. Verify that the job appears on the board and ends with a PR or local branch for human merge.
 
 For an existing bundled installation, finish or archive old jobs in place, then configure a fresh separate factory folder. Keep the original job files with that installation so they can still be resumed there. A separate installation with existing job state stays bound to its original application.

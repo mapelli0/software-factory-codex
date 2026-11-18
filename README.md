@@ -4,16 +4,17 @@ A Windows-first port of the ZazenCodes Software Factory v2 for Claude Code. It u
 
 ## Install by pointing Codex at this repo
 
-Paste this prompt into Codex. Choose the application checkout and the folder that will contain its separate factory installation.
+Paste this prompt into Codex. If the current local project is suitable, its primary folder becomes the default factory location.
 
 ```text
 Install Software Factory for Codex using
 https://github.com/mapelli0/software-factory-codex.git
 
-Read INSTALL.md and ask me for two folders before writing files:
-where the application code lives and where to install the factory.
-Copy the factory files into the separate factory directory and bind it
-to the application checkout. Leave the application's files as they are.
+Read INSTALL.md. Use this Codex project's primary folder as the factory
+location if it is suitable, and tell me which path you picked. Ask where
+the application code lives if it is not already known. Ask for a separate
+factory folder if this project overlaps the application or has no permanent
+local folder. Install the factory and bind it to the application checkout.
 
 Configure the factory's Windows PowerShell checks using the application's CI commands.
 Use its existing .NET SDK, solution, frontend workspace and package manager
@@ -34,11 +35,9 @@ Use `$factory status` to see progress and what needs your attention. You can giv
 
 ## Local dashboard
 
-Run the following from the factory directory and open the [local dashboard](http://127.0.0.1:8000/dashboard.html).
+The factory starts a local dashboard at the beginning of a run and posts the link in chat. Keep the tab open to follow stage changes, checks and reviews. The dashboard is available on the machine running the factory and stays up after the run.
 
-```powershell
-python -m http.server --bind 127.0.0.1 --directory factory
-```
+From the factory directory, use `python factory/bin/dashboard.py start` to print the link on demand, or `python factory/bin/dashboard.py stop` to shut it down.
 
 The dashboard displays job artifacts and check output. The [historical examples](examples/jobs) show what the workflow records. See [DESIGN.md](DESIGN.md) for the runtime and the [migration plan](CODEX-MIGRATION-PLAN.md) for the porting decisions and pending verification.
 

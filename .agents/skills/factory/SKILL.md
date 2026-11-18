@@ -24,7 +24,7 @@ Use the saved local job ID for resumption, status and operator feedback. A disco
 
 ## Run ownership and dispatch
 
-Call `python factory/bin/job claim` for a run or mutation and keep its returned token. Put `--run <token>` before every job command during the run, including `queue`. Call `python factory/bin/route --run <token> <id>` to route. Release with `python factory/bin/job --run <token> release` after the workers have stopped. If a previous run died, confirm its workers are stopped before using `job claim --recover`.
+For an execution run, call `python factory/bin/job claim --dashboard` and keep the token from stdout. Post the local dashboard URL from stderr in a progress update before starting job work. The dashboard refreshes automatically. If startup fails because the session cannot reach loopback, retry with `python factory/bin/dashboard.py start` using the available permission flow. If the dashboard remains unavailable, report it and continue the run. For a mutation that does not start a job run, use `job claim`. Use `job claim --recover --dashboard` when recovering a run after confirming its old workers have stopped. Put `--run <token>` before every job command during the run, including `queue`. Call `python factory/bin/route --run <token> <id>` to route. Release with `python factory/bin/job --run <token> release` after the workers have stopped.
 
 In GitHub mode, the queue prints tab-separated rows with action, issue, job ID, stage and note. Start `new` and `resume` rows within job and subagent capacity. For a new issue, call `job create <issue>`. Refresh the queue as jobs finish. A run ends when it has no runnable work and no live workers. Summarize completed jobs and anything waiting for an author or operator.
 
