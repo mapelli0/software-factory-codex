@@ -4,29 +4,20 @@ A Windows-first port of the ZazenCodes Software Factory v2 for Claude Code. It u
 
 ## Install by pointing Codex at this repo
 
-Paste this prompt into Codex. If the current local project is suitable, its primary folder becomes the default factory location.
+Install once per computer. Paste this prompt into Codex.
 
 ```text
-Install Software Factory for Codex using
-https://github.com/mapelli0/software-factory-codex.git
-
-Read INSTALL.md. Use this Codex project's primary folder as the factory
-location if it is suitable, and tell me which path you picked. Ask where
-the application code lives if it is not already known. Ask for a separate
-factory folder if this project overlaps the application or has no permanent
-local folder. Install the factory and bind it to the application checkout.
-
-Configure the factory's Windows PowerShell checks using the application's CI commands.
-Use its existing .NET SDK, solution, frontend workspace and package manager
-where applicable. Run the factory preflight and show me what changed, the
-checks that ran, and how to start my first job.
+Install the global Windows Software Factory from the main branch of
+https://github.com/mapelli0/software-factory-codex.git using INSTALL.md.
+Offer to scan my project folders for older installations. Show the launcher
+path and how to verify it from a fresh application chat.
 ```
 
-Use Git, a committed checkout, Python 3.11 or later, PowerShell 7 and a Codex client with custom subagents. GitHub mode also needs an authenticated GitHub CLI. For the files to copy, C#/.NET and React setup, and first-run verification, see the [installation guide](INSTALL.md). The runtime selects PowerShell on native Windows and Bash on Linux or WSL. The documented pilot targets Windows.
+The installer puts one runtime and nine factory roles in the user's Codex folders. Open any application checkout and invoke `$factory`. Jobs and linked worktrees are kept outside the application. A project can commit `.factory/project.json` for its display name, job limit, branch, labels and platform checks. For setup, a C# and React example, or updates, see the [installation guide](INSTALL.md).
 
 ## Start a job
 
-Open the factory directory in Codex, enter `$factory` and choose a mode. Its jobs, checks, dashboard and linked worktrees live with the factory.
+In the application chat, choose an intake mode.
 
 - **GitHub.** Label an open issue `factory`, then enter `$factory run 42` for issue 42 or `$factory run` for the queue. The factory builds and reviews the change and hands you a PR to merge.
 - **Disconnected.** Describe the request in chat. The intake agent helps scope it and waits for `/factory execute` or `$factory execute`. The factory uses the conversation as the issue brief and hands you a local branch. A GitHub remote is optional in this mode.
@@ -37,7 +28,7 @@ Use `$factory status` to see progress and what needs your attention. You can giv
 
 The factory starts a local dashboard at the beginning of a run and posts the link in chat. Keep the tab open to follow stage changes, checks and reviews. The dashboard is available on the machine running the factory and stays up after the run.
 
-From the factory directory, use `python factory/bin/dashboard.py start` to print the link on demand, or `python factory/bin/dashboard.py stop` to shut it down.
+The board opens on **All projects**. Each card and detail view names its project. Use the project selector to see how many slots each application is using. To reopen the board, invoke `$factory dashboard`. Use `$factory cleanup` in an application to check for an older installation, preview its migration, and verify the result after cutover.
 
 The dashboard displays job artifacts and check output. The [historical examples](examples/jobs) show what the workflow records. See [DESIGN.md](DESIGN.md) for the runtime and the [migration plan](CODEX-MIGRATION-PLAN.md) for the porting decisions and pending verification.
 

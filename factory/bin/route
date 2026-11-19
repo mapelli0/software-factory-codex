@@ -14,7 +14,9 @@ import sys
 from pathlib import Path
 
 FACTORY = Path(__file__).resolve().parents[1]
-CONFIG = json.loads((FACTORY / "config.json").read_text(encoding="utf-8"))
+from projects import context
+
+PROJECT, PROJECT_ID, STATE, CONFIG = context()
 
 
 def die(msg):
@@ -33,7 +35,7 @@ def main(argv):
     res = subprocess.run([sys.executable, job_bin, *run_option, "sync", job_id], capture_output=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
         die(res.stderr.strip())
-    job = json.loads((FACTORY / "jobs" / job_id / "job.json").read_text(encoding="utf-8"))
+    job = json.loads((STATE / "jobs" / job_id / "job.json").read_text(encoding="utf-8"))
     intake = job["intake"] or die(f"{job_id} has no intake.md")
     risk = CONFIG["routing"].get(intake["risk"]) or die(
         f"risk {intake['risk']!r} isn't in config.json routing ({', '.join(CONFIG['routing'])})")

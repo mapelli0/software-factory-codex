@@ -1,9 +1,12 @@
 # Factory design
 
-Codex discovers `.agents/skills/factory/SKILL.md` and the nine custom agents under `.codex/agents/`. The parent supervises the queue and agents. It starts from the standalone factory directory. The local binding selects the application checkout for Git and GitHub commands. Job files live under `factory/jobs/`, and linked worktrees live under `.worktrees/` in the factory directory. The application repository's Git metadata registers those worktrees. Each accepted request gets a dedicated worktree. GitHub jobs get one PR and disconnected jobs retain a local branch.
+The user-wide factory skill and its nine factory-prefixed agents run from application chats. The global launcher resolves a Git checkout to a stable project ID. Its registry, run lock, job artifacts and linked worktrees live under the local user data directory. Each project has independent run ownership and one active-job limit across intake modes. All runs share the loopback dashboard. Each accepted request gets a branch and worktree. GitHub jobs get one PR and disconnected jobs retain a local branch.
 
 | Component | Responsibility |
 | --- | --- |
+| `install.py` and `factory.py` | Install one copy and dispatch commands with an explicit application context. |
+| `factory/bin/projects.py` | Resolve the project registry, validation policy, job capacity settings and preview ports. |
+| `factory/bin/migration.py` | Preview, back up, import and retire verified legacy installations. |
 | `factory/bin/job` | Own job state, enforce legal stage transitions, coordinate worktrees and GitHub handoffs, and reconcile manual merges. |
 | `factory/bin/route` | Select code review and the UX, UI or security lenses based on intake risk and surfaces. A `default` model entry uses the client's defaults. |
 | `factory/bin/gate` | Run the configured checks from the worktree and record the result, commit and merge base. Verify protected paths. |

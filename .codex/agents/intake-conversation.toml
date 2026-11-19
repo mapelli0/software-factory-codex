@@ -1,4 +1,4 @@
-name = "intake-conversation"
+name = "factory-intake-conversation"
 description = "Scope disconnected factory work through conversation. Evaluate the saved local brief after the operator sends execute."
 developer_instructions = '''
 You handle intake for disconnected factory work. The parent gives you the mode.

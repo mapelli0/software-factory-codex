@@ -1,5 +1,7 @@
 # Migrate Software Factory v2 to Codex
 
+The global factory is implemented on `main`. Use [INSTALL.md](INSTALL.md) for the current setup. The original per-application installation below records the earlier port.
+
 ## Scope and target
 
 Port the template in [software-factory-claude-code-v2](https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2) to the standalone `software-factory-codex` workspace. The source is a template inside the ZazenCodes repository. The installer defaults to the current local Codex project's primary folder when suitable and asks for the application checkout if needed. Start Codex from that factory directory so it discovers the skill and agent profiles. The factory stores its binding locally and keeps its tools, checks, job state and worktrees outside the application checkout.
@@ -100,7 +102,7 @@ On first use in a chat, ask whether to check the labeled GitHub queue or work di
 
 The port lives in this workspace. Live GitHub and Linux or WSL pilots are still pending.
 
-## Proposed next release — one factory for all local projects
+## Global release — one factory for all local projects
 
 Install the factory once per user on each computer. Open an application in Codex and invoke `$factory` there. The first execution starts one live dashboard. Runs from other projects reuse its URL. Each chat continues to drive its selected project. Opening the board only reads local job records, so viewing all projects never starts another project's queue.
 
@@ -166,3 +168,7 @@ Add `$factory cleanup` to the global skill and document it in `README.md` and `I
 3. For a confirmed installation, show what will be migrated, backed up and removed. After the operator approves that preview, perform the retirement procedure above for this project, including registration if needed, import verification and a reviewable diff for tracked removals. Report **Migrated** after the follow-up scan and global runtime verification pass. An interrupted run resumes from the saved inventory.
 
 In the Windows pilot, invoke the command from a subfolder of a project with a bundled legacy copy, migrate it, and run it again. The second run must report **Already clean** with no new diff, backup or duplicate job. Also exercise a project with unfinished work and verify that its jobs and files remain available, and that another registered project's state is untouched throughout.
+
+### Windows verification
+
+The native integration tests use disposable user profiles, Git checkouts and a real loopback server. Run `python -m unittest discover -s tests -v` for installation, project identity, concurrency across intake modes, job recovery, dashboard sharing, and cleanup. The queue test supplies GitHub CLI responses locally. Run `python tests/windows_pilot.py` for actual .NET builds, React rendering checks and dashboard interactions against the live server using a browser DOM implementation. It downloads its frontend dependencies into a temporary project. Live GitHub PR and Linux or WSL pilots remain separate.

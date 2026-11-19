@@ -18,10 +18,11 @@ import sys
 import time
 from pathlib import Path
 
-from runtime import check_job_checkout, project_checkout, run_checks as run_platform_checks
+from projects import context, validate_job, validation_policy, git as project_git, checkout_root
+from runtime import run_checks as run_platform_checks
 
 FACTORY = Path(__file__).resolve().parents[1]
-CONFIG = json.loads((FACTORY / "config.json").read_text(encoding="utf-8"))
+PROJECT, PROJECT_ID, STATE, CONFIG = context()
 TAIL = 80
 
 
@@ -37,7 +38,7 @@ def git(worktree, *args):
     return res.stdout
 
 
-def protected_changes(worktree, base):
+def protected_changes(worktree, base, policy):
     """Files changed under protected_paths."""
     diff = git(worktree, "diff", "--name-status", "-z", base, "HEAD")
     fields = iter(diff.rstrip("\0").split("\0")) if diff else iter(())
@@ -46,15 +47,15 @@ def protected_changes(worktree, base):
         path = next(fields)
         paths = [path, next(fields)] if status.startswith(("R", "C")) else [path]
         for changed in paths:
-            if any(fnmatch.fnmatchcase(changed, pattern) for pattern in CONFIG["protected_paths"]):
+            if any(fnmatch.fnmatchcase(changed, pattern) for pattern in policy["protected_paths"]):
                 hits.append(f"{status[0]} {changed}")
     return hits
 
 
-def run_checks(worktree):
+def run_checks(worktree, policy):
     start = time.monotonic()
     try:
-        res = run_platform_checks(FACTORY, CONFIG, worktree)
+        res = run_platform_checks(STATE / "policies", policy, worktree)
     except OSError as error:
         die(str(error))
     return res.returncode, res.stdout, int(time.monotonic() - start)
@@ -63,19 +64,23 @@ def run_checks(worktree):
 def gate(job_id, merge):
     if not job_id or any(c not in "0123456789abcdefghijklmnopqrstuvwxyz-" for c in job_id):
         die("invalid job ID")
-    job = json.loads((FACTORY / "jobs" / job_id / "job.json").read_text(encoding="utf-8"))
-    check_job_checkout(FACTORY, project_checkout(FACTORY), job)
+    job = json.loads((STATE / "jobs" / job_id / "job.json").read_text(encoding="utf-8"))
+    validate_job(PROJECT_ID, STATE, job)
+    policy = job["validation"]
     worktree = job["worktree"]
     if job["round"] < 1:
         die(f"{job_id} hasn't started a build round")
-    round_dir = FACTORY / "jobs" / job_id / f"round-{job['round']}"
+    round_dir = STATE / "jobs" / job_id / f"round-{job['round']}"
     commit = git(worktree, "rev-parse", "HEAD").strip()
-    target = job.get("base_commit") or f"origin/{CONFIG['base_branch']}"
+    target = job.get("base_commit") or f"origin/{job['base_branch']}"
     base = git(worktree, "merge-base", target, commit).strip()
-    protected = protected_changes(worktree, base)
+    protected = protected_changes(worktree, base, policy)
     if git(worktree, "status", "--porcelain").strip():
         die("worktree must be clean before the gate")
-    code, log, seconds = run_checks(worktree)
+    if protected:
+        code, log, seconds = 1, "Protected check definitions changed.", 0
+    else:
+        code, log, seconds = run_checks(worktree, policy)
     if git(worktree, "status", "--porcelain").strip() or git(worktree, "rev-parse", "HEAD").strip() != commit:
         code = code or 1
         log += "\nFactory checks changed the worktree or commit.\n"
@@ -102,8 +107,11 @@ def gate(job_id, merge):
 
 def main(argv):
     if argv and argv[0] == "--preflight" and len(argv) <= 2:
-        checkout = Path(argv[1]).resolve() if len(argv) == 2 else project_checkout(FACTORY)
-        code, log, _ = run_checks(checkout)
+        checkout = Path(argv[1]).resolve() if len(argv) == 2 else PROJECT
+        if checkout_root(checkout) != PROJECT:
+            die("preflight worktree belongs to another project")
+        revision = project_git(PROJECT, "rev-parse", "HEAD").stdout.decode().strip()
+        code, log, _ = run_checks(checkout, validation_policy(PROJECT, STATE, revision))
         print(log, end="")
         sys.exit(code)
     elif len(argv) == 1 and not argv[0].startswith("-"):

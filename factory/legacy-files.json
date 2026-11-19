@@ -1,0 +1,93 @@
+{
+  ".agents/skills/factory/SKILL.md": [
+    "b6feb6517309c30fbbca35fbaadedf7b8d0b60e93dc49bbf3cf923893a38723e",
+    "eb482acace1f11dbd0bf95d170b29dd7e7bb2bc035ad8a0a9fdc8721b53bcbd9",
+    "7337a810f604ee9f1f4e8e2b72e37b79997609693e8ca3597c13694e0eca3a91"
+  ],
+  ".codex/agents/approver.toml": [
+    "4aea2dc0d1bb0a2c50579365dfb9e3f4d6bbca7ab569bad060bceba25c1c781c",
+    "33206e81a707dd8ab1083a41ca6eeaf8cdd313ddb389debab78fc2dbf1e0cf89"
+  ],
+  ".codex/agents/builder.toml": [
+    "59ac4f7a7c50cf680e2617176fa9edb37643d13e56f9765d2b77a15b4073bce3",
+    "3d6e6d08b806158a11ee6d15372b15f5fc00a18c499cbb92e71ca523e219448c"
+  ],
+  ".codex/agents/intake-conversation.toml": [
+    "e5ade192e7f4133d024f69c5e928d9dc5020b990c3ce265fa39430d7202a8882",
+    "d181ba7c8e066b75fbc31c610b92d94d0edfafc98e3ce60ca8ddd362336bc921"
+  ],
+  ".codex/agents/intake.toml": [
+    "7eff55e694106ea681c25f3c64f3128a0d15d6cfcb1b76eda5109796fbb3eecd",
+    "2d54600a1d8cb4e01b2bac165fb942d78e4b2e205ea42307824dc07b131e3cc2"
+  ],
+  ".codex/agents/reviewer-code.toml": [
+    "c605ed8bf2783d66bc2aea6d613f3fc179b2891de6ded2f079294dc06fd24053",
+    "b7308218ece4791dc8dc0017a7f6028b89bb8b2d29e656d46b8a31dda9b8e104"
+  ],
+  ".codex/agents/reviewer-security.toml": [
+    "a3c0bd3e58e03c3dfdcf7b7543a47ee631592869cf60047dd763110fb41c7c31",
+    "0608316d4e9ebb5f74610f44c0e147cd130acced103bbb2fd2f730e9c8cc6259"
+  ],
+  ".codex/agents/reviewer-ui.toml": [
+    "25feaa740139a9e79c21aa0b289a724cf5bf2b588c38290afd346392a8ad4d9c",
+    "639268b392c530f86b47cec1e69a1c884d30ce3b1145e3299bedefe275f96242"
+  ],
+  ".codex/agents/reviewer-ux.toml": [
+    "afa7c6cbea58bf3eaad688cc6fd329962b3f3b9990bd39381f7a4e4afb23adc0",
+    "15f896f68c6732dbc4ba4b4579af2feb0a3a4c4b60d3070e8c57aacdadc0673b"
+  ],
+  ".codex/agents/spec-writer.toml": [
+    "0d16b9cd340ef5b3694e09fe03b195474da243b596d63fcd8eda52c04df531b2",
+    "c83c444f5491450f111121feafd0144505fa7c590c0ac933cb473a5ad43cf456"
+  ],
+  ".codex/config.toml": [
+    "0147347bfbb869bcce93c4478ac61892e5dd09139b57876a842f8fcb391971d5"
+  ],
+  ".gitignore": [
+    "3a981277bf327d3ad79297128020ebe7cbf559f132155357317909133e2f7573",
+    "957fc9a0238ee037dd9ae48693eabd1c2a373ec055b111e7ff473e2abb7f09b9",
+    "2a5d87c559918f03f63f4aabe1338359f9250c55c296b10f7122e0dae0335b2c"
+  ],
+  "AGENTS.md": [
+    "150967ea2a0ba07c3a5e9ae9718a8e21983d9868a2674dd5fe052c4328e486d8",
+    "b505213b48d10bb45363cd0b123d9aadf8eeca2ac0c63e7ab376baaced183c4e",
+    "2f0a7ac93d4fee4703782e12157105a44954835eeec6a1135b0bcd572aa296e2"
+  ],
+  "INSTALL.md": [
+    "5bf93723b87bebeec69a1507636d0af3abc6169136a57148f36bd9800dff6e09",
+    "178f317bf2bd51eb7cd230b23be8897581519b8729cf1605a561a5b4411f3adb",
+    "20ae0d7f66eb2180457d0f56c6cbc3bb780b404701969fc5cc7d6c6372f6c698"
+  ],
+  "factory/bin/dashboard.py": [
+    "df85d86eb97bdfe5edfa9cd15f9b17971cea9054b4d1a4cace851a3f11024a0d"
+  ],
+  "factory/bin/gate": [
+    "79f763103077c426e8dd3bbd51ba02506c80c417bb82d158f68fc7aa421a1da5",
+    "854564eeca2f0ce9a29b85044dfbce141a676488dd94efd7cab992473a7273ab"
+  ],
+  "factory/bin/job": [
+    "648eafb0eea6bd062f1c81daebad50999dfc488196fec673e8487cb6f13b8e65",
+    "5a36d0e595b7282d251ff023e64938333214d65800dbc45bfed07fc6d5dfd8d8",
+    "76daa57029af8941dd71830b49a2cba45217ab4e2d4062efb6ad791e9d1d36ee"
+  ],
+  "factory/bin/route": [
+    "a50d06767e1598726451b76240d2bac3ec5f295e5586087d590bb8667af0dd2f"
+  ],
+  "factory/bin/runtime.py": [
+    "fe96034a78e065601cc600976a99dabd3f1684748b027c57f532a275a87252fc",
+    "1375fc6208b4bce602192d860f10823527554daa5385fde7cf2631b72f0e981e"
+  ],
+  "factory/checks.ps1": [
+    "61995c9e0d4ec36e899f88ae3614524e6422f64439515905904041329ac49c19"
+  ],
+  "factory/checks.sh": [
+    "c14883a7cf74f62edf2f32a76c74881e2873022205c999f71dc4cbfb1c38f1b4",
+    "6ffe5ae6126f3c5be5a2c707f985fef85651eaf91bac083655fbafe5033f189c"
+  ],
+  "factory/config.json": [
+    "3c653bfad9943b7a2a3d9084033efcdf57c6d212d2ccaed320645ca550a2ce49"
+  ],
+  "factory/dashboard.html": [
+    "8fb63ecb1966febd60856ebaa22e5d9452d5e813d01fc854fcef6cac2209f638"
+  ]
+}

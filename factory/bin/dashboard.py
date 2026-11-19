@@ -5,23 +5,23 @@ import hmac
 import html
 import http.client
 import json
-import os
 import re
 import subprocess
 import sys
 import time
+from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from secrets import token_hex
 from threading import Thread
 from urllib.parse import unquote, urlsplit
 
+from projects import HOME, project_dir, registry, read_json, write_json
 from runtime import WINDOWS, exclusive_lock
 
 FACTORY = Path(__file__).resolve().parents[1]
-JOBS = FACTORY / "jobs"
-STATE = FACTORY.parent / ".factory-dashboard.local.json"
-LOCK = FACTORY.parent / ".factory-dashboard.local.lock"
+STATE = HOME / "dashboard.json"
+LOCK = HOME / "dashboard.lock"
 HOST = "127.0.0.1"
 CONTROL = "/_factory_dashboard"
 JOB_ID = re.compile(r"[0-9]{3,}-[a-z0-9-]+")
@@ -42,6 +42,32 @@ def job_route(parts, directory):
         return parts[1] == "job.json" or bool(ARTIFACT.fullmatch(parts[1]))
     return (len(parts) == 3 and not directory and bool(ROUND.fullmatch(parts[1]))
             and bool(ARTIFACT.fullmatch(parts[2])))
+
+
+def public_job(job):
+    fields = ("id", "issue", "title", "issue_url", "pr", "pr_url", "mode", "stage", "round",
+              "intake", "agents", "handoff", "handoff_reason", "cost_usd", "started", "ended")
+    return {key: job.get(key) for key in fields}
+
+
+def board_data():
+    projects = []
+    jobs = []
+    records = registry()["projects"]
+    names = Counter(record["name"] for record in records.values())
+    for project_id, record in records.items():
+        name = record["name"]
+        if names[name] > 1:
+            name = f"{name} ({project_id[:8]})"
+        projects.append({"id": project_id, "name": name, "concurrency": record["concurrency"]})
+        directory = project_dir(project_id) / "jobs"
+        for path in directory.glob("*/job.json"):
+            if path.resolve() != path or not JOB_ID.fullmatch(path.parent.name):
+                continue
+            job = read_json(path, {})
+            if job.get("id") == path.parent.name and job.get("project_id") == project_id:
+                jobs.append({**public_job(job), "project_id": project_id, "project_name": name})
+    return {"projects": projects, "jobs": sorted(jobs, key=lambda j: j.get("started") or "")}
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -72,10 +98,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
         path = unquote(urlsplit(self.path).path)
         if path == CONTROL and self.has_token():
             self.send_content()
-        elif path == "/dashboard.html":
+        elif path in ("/", "/dashboard.html"):
             self.send_content((FACTORY / "dashboard.html").read_bytes(), "text/html; charset=utf-8")
-        elif path.startswith("/jobs/"):
-            self.send_job(path.removeprefix("/jobs/"))
+        elif path == "/projects.json":
+            self.send_content(json.dumps(board_data()).encode(), "application/json")
+        elif path.startswith("/projects/"):
+            parts = path.split("/", 4)
+            if len(parts) == 5 and parts[3] == "jobs" and parts[2] in registry()["projects"]:
+                self.send_job(project_dir(parts[2]) / "jobs", parts[4])
+            else:
+                self.send_error(404)
         else:
             self.send_error(404)
 
@@ -86,10 +118,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_content()
         Thread(target=self.server.shutdown, daemon=True).start()
 
-    def send_job(self, route):
+    def send_job(self, jobs, route):
         directory = not route or route.endswith("/")
         parts = route.removesuffix("/").split("/") if route else []
-        source = JOBS.joinpath(*parts)
+        source = jobs.joinpath(*parts)
         if not job_route(parts, directory) or source.resolve() != source:
             self.send_error(404)
             return
@@ -97,7 +129,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_listing(parts, source)
             return
         try:
-            data = source.read_bytes()
+            data = json.dumps(public_job(read_json(source))).encode() if source.name == "job.json" else source.read_bytes()
         except (FileNotFoundError, IsADirectoryError):
             self.send_error(404)
             return
@@ -143,11 +175,14 @@ def read_state():
 def serve(token):
     if not (FACTORY / "dashboard.html").is_file():
         raise OSError("dashboard.html is missing")
-    with ThreadingHTTPServer((HOST, 0), DashboardHandler) as server:
+    preferred = read_state().get("port", 0)
+    try:
+        listener = ThreadingHTTPServer((HOST, preferred), DashboardHandler)
+    except OSError:
+        listener = ThreadingHTTPServer((HOST, 0), DashboardHandler)
+    with listener as server:
         server.control_token = token.encode("ascii")
-        temporary = STATE.with_suffix(".tmp")
-        temporary.write_text(json.dumps({"port": server.server_port, "token": token}), encoding="utf-8")
-        temporary.replace(STATE)
+        write_json(STATE, {"port": server.server_port, "token": token})
         server.serve_forever()
 
 
@@ -192,7 +227,8 @@ def stop():
                 time.sleep(0.05)
             else:
                 raise OSError("the live dashboard is still responding")
-        STATE.unlink(missing_ok=True)
+        if state.get("port"):
+            write_json(STATE, {"port": state["port"]})
 
 
 def main():
