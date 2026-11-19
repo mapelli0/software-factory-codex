@@ -99,3 +99,50 @@ dotnet test -c Release --no-restore
 On first use in a chat, ask whether to check the labeled GitHub queue or work disconnected. Add `intake-conversation` to scope a local request from the conversation. The operator starts the pipeline with `/factory execute` or `$factory execute`. Create the job only at that point, storing the brief in `issue.md` and pinning the local base commit. Reuse the worktree, gates, review and approval stages. Hand off a local branch for human merge, and record completion when Git contains the gated commit.
 
 The port lives in this workspace. Live GitHub and Linux or WSL pilots are still pending.
+
+## Proposed next release — one factory for all local projects
+
+Install the factory once per user on each computer. Open an application in Codex and invoke `$factory` there. The first execution starts one live dashboard. Runs from other projects reuse its URL. Each chat continues to drive its selected project. Opening the board only reads local job records, so viewing all projects never starts another project's queue.
+
+### 1. Install once and register projects on first use
+
+Keep one versioned copy of the Python tools, default settings and dashboard outside application checkouts. The installer supplied by this repository installs the `$factory` skill and nine factory-prefixed agent roles in Codex's user-level discovery folders. Make repeat installs update only factory-owned files and preserve unrelated personal skills and agents. Test discovery from a fresh application chat on native Windows without requiring Windows symlink privileges. [Codex skill locations](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills) and [personal custom agents](https://learn.chatgpt.com/docs/agent-configuration/subagents#custom-agents).
+
+On first use, resolve the application from the current Git checkout, including from a subfolder. Link related worktrees to the registered checkout. Ask which project to use when the context is ambiguous. Keep a machine-local registry mapping a stable project ID to the checkout and display name. Registration also works without a Git remote. Detect a moved checkout or a second clone and resolve its identity before starting work. Continue to ask whether to check GitHub for labeled issues or collect a disconnected brief. Only the explicit execute command starts that brief, and the operator retains the merge decision.
+
+### 2. Keep project settings small and portable
+
+| Where | What belongs there |
+| --- | --- |
+| Shared installation | Common workflow, agents, dashboard, validation runner and default settings. |
+| `.factory/project.json` in the application repo | Optional, version-controlled overrides for the project name, maximum active jobs, base branch, queue labels and validation commands or existing CI script paths. Validate the file, inherit omitted settings from the shared defaults, and explain invalid values before starting work. |
+| Application `AGENTS.md` | Human-readable build, test and preview guidance, such as the .NET solution, React workspace and how the UI connects to the API. Reuse existing instructions and CI scripts. |
+| Local user data outside both repos | Checkout registrations, machine paths, project-specific job records and worktrees, locks, dashboard port and server state. An update of the shared tools preserves these files. |
+
+A project can use defaults or commit just the overrides its team needs. This example gives a service two job slots.
+
+```json
+{
+  "name": "Orders API",
+  "concurrency": 2
+}
+```
+
+Keep the gate runner in the shared install. At job creation, record the effective validation policy and the trusted base revision supplying the project's check definitions. Run these checks against the job worktree. Protect the selected check definitions so a change under review cannot weaken its own checks. Allow Windows and Linux commands to use the project's existing PowerShell, Bash, .NET or frontend scripts.
+
+### 3. Make execution and capacity project-aware
+
+Pass the project ID through `job`, `gate`, `route` and every worker. Scope run ownership, issue lookups, job files, Git commands and recovery to that project. Give separate projects independent owners so two chats can make progress at the same time. Use the project ID plus the existing job ID as the complete identifier, including in artifact links. Allocate preview ports across the installation so two first jobs can each start their own frontend and backend.
+
+Apply the project's `concurrency` limit to the combined count of active GitHub and disconnected jobs. Reserve a slot under the project lock on creation or resumption. Waiting for input or human merge releases the slot. If a limit is reduced below current usage, finish active jobs and admit the next job when capacity is available. Keep three as the inherited project default. The number of reviewers that can run at once also depends on the Codex session's worker capacity.
+
+### 4. Serve one live board
+
+Start or reuse one loopback server under a user-wide startup lock. Save its local port for reuse across restarts when available and print the actual URL in every run. Default to **All projects**, with a project filter and active-versus-configured counts. Show the project name on every card and job detail, and qualify links with the stable project ID. For example, **Orders API · #42** and **Storefront · #42** must open different jobs. Show the waiting reason and handoff state for both intake modes. Serve only registered job artifacts and keep the board useful when a checkout is offline.
+
+### 5. Migrate and prove the change on Windows
+
+1. Add a migration preview that reads each existing `.factory-project.local.json`, reports the checkout and custom settings, and identifies active jobs. Map machine-specific notes to local storage and offer portable project settings for review. Let active jobs finish in their existing installation before cutover. Import completed history with its project identity and make repeat imports safe. Keep the old installation available for rollback.
+2. Pilot two projects with the same issue number, different limits (two jobs and one job), and different checks. Exercise both GitHub and disconnected intake. Verify that each project reaches its own limit, an extra job waits, concurrent chats respect ownership, and waiting jobs resume only into an available slot.
+3. Start both projects together. Verify one dashboard URL, correct project labels and artifact links, live updates, distinct preview ports, and independent restart and recovery. Confirm a failing .NET or React check blocks only its own job. Confirm ordinary runs add no factory runtime files to application repos.
+4. Replace the per-application instructions in `README.md`, `INSTALL.md`, the skill and role prompts with the verified global workflow. Include installation from the repo, first-project registration, configuration, updates and migration. Verify the same behavior on Linux or WSL before declaring parity.
