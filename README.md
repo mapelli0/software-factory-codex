@@ -2,45 +2,22 @@
 
 A Windows-first port of the ZazenCodes Software Factory v2 for Claude Code. It uses a Codex skill and custom subagents to take a request through intake, specification, implementation, project checks and review. A person makes the final merge in GitHub or in local Git.
 
-## Install by pointing Codex at this repo
+<a name="install-by-pointing-codex-at-this-repo"></a>
 
-Paste this prompt into Codex. Choose the application checkout and the folder that will contain its separate factory installation.
+## Install from a Codex chat
+
+Open any local Codex chat on Windows and paste this message. Codex handles the download and installs the factory once for your Windows account.
 
 ```text
-Install Software Factory for Codex using
-https://github.com/mapelli0/software-factory-codex.git
-
-Read INSTALL.md and ask me for two folders before writing files:
-where the application code lives and where to install the factory.
-Copy the factory files into the separate factory directory and bind it
-to the application checkout. Leave the application's files as they are.
-
-Configure the factory's Windows PowerShell checks using the application's CI commands.
-Use its existing .NET SDK, solution, frontend workspace and package manager
-where applicable. Run the factory preflight and show me what changed, the
-checks that ran, and how to start my first job.
+Install Software Factory for all my Codex projects on this Windows computer.
+Download the main branch of https://github.com/mapelli0/software-factory-codex
+to a temporary folder, run install.py, and verify that the factory skill and
+all nine agents are installed.
 ```
 
-Use Git, a committed checkout, Python 3.11 or later, PowerShell 7 and a Codex client with custom subagents. GitHub mode also needs an authenticated GitHub CLI. For the files to copy, C#/.NET and React setup, and first-run verification, see the [installation guide](INSTALL.md). The runtime selects PowerShell on native Windows and Bash on Linux or WSL. The documented pilot targets Windows.
+When Codex confirms the installation, open a fresh chat in one of your Git projects and type `$factory status`. It shows the selected project and the installed factory version. If the project already has an older factory, type `$factory cleanup` to preview its migration.
 
-## Start a job
-
-Open the factory directory in Codex, enter `$factory` and choose a mode. Its jobs, checks, dashboard and linked worktrees live with the factory.
-
-- **GitHub.** Label an open issue `factory`, then enter `$factory run 42` for issue 42 or `$factory run` for the queue. The factory builds and reviews the change and hands you a PR to merge.
-- **Disconnected.** Describe the request in chat. The intake agent helps scope it and waits for `/factory execute` or `$factory execute`. The factory uses the conversation as the issue brief and hands you a local branch. A GitHub remote is optional in this mode.
-
-Use `$factory status` to see progress and what needs your attention. You can give feedback on a job and resume from its saved state.
-
-## Local dashboard
-
-Run the following from the factory directory and open the [local dashboard](http://127.0.0.1:8000/dashboard.html).
-
-```powershell
-python -m http.server --bind 127.0.0.1 --directory factory
-```
-
-The dashboard displays job artifacts and check output. The [historical examples](examples/jobs) show what the workflow records. See [DESIGN.md](DESIGN.md) for the runtime and the [migration plan](CODEX-MIGRATION-PLAN.md) for the porting decisions and pending verification.
+The global installer and current usage instructions are on the [main branch](https://github.com/mapelli0/software-factory-codex/tree/main). For prerequisites, project settings and updates, see the [installation guide](https://github.com/mapelli0/software-factory-codex/blob/main/INSTALL.md).
 
 ## Thanks and license
 
