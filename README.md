@@ -2,18 +2,22 @@
 
 A Windows-first port of the ZazenCodes Software Factory v2 for Claude Code. It uses a Codex skill and custom subagents to take a request through intake, specification, implementation, project checks and review. A person makes the final merge in GitHub or in local Git.
 
-## Install by pointing Codex at this repo
+<a name="install-by-pointing-codex-at-this-repo"></a>
 
-Install once per computer. Paste this prompt into Codex.
+## Install from a Codex chat
+
+Open any local Codex chat on Windows and paste this message. Codex handles the download and installs the factory once for your Windows account.
 
 ```text
-Install the global Windows Software Factory from the main branch of
-https://github.com/mapelli0/software-factory-codex.git using INSTALL.md.
-Offer to scan my project folders for older installations. Show the launcher
-path and how to verify it from a fresh application chat.
+Install Software Factory for all my Codex projects on this Windows computer.
+Download the main branch of https://github.com/mapelli0/software-factory-codex
+to a temporary folder, run install.py, and verify that the factory skill and
+all nine agents are installed.
 ```
 
-The installer puts one runtime and nine factory roles in the user's Codex folders. Open any application checkout and invoke `$factory`. Jobs and linked worktrees are kept outside the application. A project can commit `.factory/project.json` for its display name, job limit, branch, labels and platform checks. For setup, a C# and React example, or updates, see the [installation guide](INSTALL.md).
+When Codex confirms the installation, open a fresh chat in one of your Git projects and type `$factory status`. It shows the selected project and the installed factory version. If the project already has an older factory, type `$factory cleanup` to preview its migration.
+
+Projects can share settings such as job limits and validation commands in `.factory/project.json`. See the [installation guide](INSTALL.md) for prerequisites, updates, and a C# and React example.
 
 ## Start a job
 

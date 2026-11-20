@@ -1,10 +1,12 @@
-# Install once per user
+# Install Software Factory for your Windows account
 
-In Codex, point to the factory repository and ask it to install from the `main` branch using this guide. On Windows you need Git, Python 3.11+, PowerShell 7 and Codex with custom agents. GitHub intake also uses an authenticated GitHub CLI. Disconnected operation works with local Git. Linux and WSL use Bash and separate user installations.
+For the chat-based install, paste the [installation prompt](README.md#install-from-a-codex-chat) into any local Codex chat. Codex downloads `main` to a temporary folder, runs `python install.py`, and checks the installed skill and nine `factory-*.toml` agent profiles under the active Codex user directory. Once it finishes, open a fresh chat in an application project and enter `$factory status`.
 
-## Install or update
+On Windows you need Git, Python 3.11+, PowerShell 7 and Codex with custom agents. GitHub intake also uses an authenticated GitHub CLI. Disconnected operation works with local Git. Linux and WSL use Bash and separate user installations.
 
-Run from a checkout of this repository. If cloning, select `main` explicitly.
+## Manual installation with PowerShell
+
+If you prefer to install it yourself, run these commands from a folder where you keep source checkouts.
 
 ```powershell
 git clone --branch main https://github.com/mapelli0/software-factory-codex.git
@@ -12,9 +14,13 @@ cd software-factory-codex
 python install.py
 ```
 
-The installer prints the absolute launcher path. It copies the skill and runtime to `skills/factory` and the nine factory-prefixed role profiles to `agents` under `CODEX_HOME` (normally `~/.codex`). It preserves unrelated skills and roles and reports a conflicting local edit before updating. To update, finish active factory runs, stop the shared dashboard, pull `main`, run the installer again, and open a fresh project chat. The next run starts the updated board. No administrator account or Windows symlinks are required.
+The installer prints the absolute launcher path. It copies the skill and runtime to `skills/factory` and the nine factory-prefixed role profiles to `agents` under `CODEX_HOME` (normally `~/.codex`). It preserves unrelated skills and roles and reports a conflicting local edit before updating.
 
 Job state, the project registry, preview port assignments, backups and dashboard state live in `%LOCALAPPDATA%\software-factory-codex` on Windows and the user's XDG data directory on Linux. Set `SOFTWARE_FACTORY_HOME` to choose a different permanent data directory outside your application checkouts. Keep that setting consistent across chats. Only portable project settings belong in Git.
+
+## Update an existing global installation
+
+Finish active factory runs and stop the shared dashboard. Paste the same installation prompt into Codex to fetch and install the current version from `main`. For a manual update, pull `main` in your source checkout and run `python install.py` again. Open a fresh project chat after the update. The next run starts the updated board.
 
 ## Open an application
 
