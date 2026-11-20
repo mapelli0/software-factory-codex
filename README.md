@@ -32,9 +32,9 @@ Use `$factory status` to see progress and what needs your attention. You can giv
 
 ## Local dashboard
 
-The factory starts a local dashboard at the beginning of a run and posts the link in chat. Keep the tab open to follow stage changes, checks and reviews. The dashboard is available on the machine running the factory and stays up after the run.
+At the start of each run or resume, the factory posts the dashboard's clickable local address in the project chat. Type **`$factory dashboard`** to get the live address again. Keep the tab open to follow stage changes, checks and reviews. The dashboard is available on the machine running the factory and stays up after the run.
 
-The board opens on **All projects**. Each card and detail view names its project. Use the project selector to see how many slots each application is using. To reopen the board, invoke `$factory dashboard`. Use `$factory cleanup` in an application to check for an older installation, preview its migration, and verify the result after cutover.
+The board opens on **All projects**. Each card and detail view names its project. Use the project selector to see how many slots each application is using. Use `$factory cleanup` in an application to check for an older installation, preview its migration, and verify the result after cutover. If a job repeatedly asks for permission to save reports, run **`$factory doctor <job-id>`** in that chat. [Troubleshooting repeated approvals](INSTALL.md#if-a-run-keeps-asking-for-approval)
 
 The dashboard displays job artifacts and check output. The [historical examples](examples/jobs) show what the workflow records. See [DESIGN.md](DESIGN.md) for the runtime and the [migration plan](CODEX-MIGRATION-PLAN.md) for the porting decisions and pending verification.
 

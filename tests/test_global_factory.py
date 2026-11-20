@@ -95,6 +95,59 @@ class GlobalFactoryTest(unittest.TestCase):
         self.factory(api, "dashboard", "stop")
         self.assertEqual(self.factory(ui, "dashboard", "start").stdout.strip(), urls[0])
 
+    def test_dashboard_address_before_run_and_on_resume(self):
+        app = self.app("Dashboard project")
+        line = self.factory(app, "dashboard", "start", "--link").stdout.strip()
+        url = self.factory(app, "dashboard", "start").stdout.strip()
+        self.assertRegex(url, r"^http://127\.0\.0\.1:\d+/dashboard\.html$")
+        self.assertEqual(line, f"Live factory dashboard: [{url}]({url})")
+        with urllib.request.urlopen(url, timeout=5) as response:
+            self.assertEqual(response.status, 200)
+        token = self.factory(app, "job", "claim").stdout.strip()
+        self.assertEqual(self.factory(app, "dashboard", "start", "--link").stdout.strip(), line)
+        self.factory(app, "job", "--run", token, "release")
+
+    def test_access_check_and_automatic_intake_routing(self):
+        app = self.app("Intake project")
+        probe = self.factory(app, "doctor")
+        self.assertIn(f"Write check passed: {self.data}", probe.stdout)
+        self.assertFalse((self.data / "registry.json").exists())
+        self.run_cli(["git", "config", "--get", "softwarefactory.projectid"], app, code=1)
+        job_id = self.local_job(app).stdout.strip()
+        d = Path(self.registration(app)["jobs"]) / job_id
+        before = (d / "job.json").read_bytes()
+        self.assertIn(f"Write check passed: {d}", self.factory(app, "doctor", job_id).stdout)
+        self.assertEqual((d / "job.json").read_bytes(), before)
+        self.assertFalse(list(self.data.rglob(".factory-access-*")))
+        self.assertIn("folder not found", self.factory(app, "doctor", "999-missing", code=1).stderr)
+        intake = d / "intake.md"
+        intake.write_text("DECISION: ACCEPT\nRISK: high\nSURFACES: unknown\n")
+        self.assertIn("unknown intake surface", self.factory(app, "job", "advance", job_id, "spec", code=1).stderr)
+        job = json.loads((d / "job.json").read_bytes())
+        self.assertEqual(job["stage"], "intake")
+        self.assertFalse(Path(job["worktree"]).exists())
+        intake.write_text("DECISION: ACCEPT\nRISK: high\nSURFACES: ui, security\n\nUpdate a payment screen.\n")
+        self.factory(app, "job", "advance", job_id, "spec")
+        job = json.loads((d / "job.json").read_bytes())
+        self.assertEqual(set(job["agents"]["reviewers"]), {"code", "security", "ui", "ux"})
+        self.assertEqual(job["stage"], "spec")
+        self.assertTrue((Path(job["worktree"]) / ".git").is_file())
+
+    @unittest.skipUnless(os.name == "nt", "Windows directory permissions")
+    def test_access_check_reports_denied_job_folder(self):
+        app = self.app("Permission check")
+        job_id = self.local_job(app).stdout.strip()
+        folder = Path(self.registration(app)["jobs"]) / job_id
+        # Deny file creation only in this disposable job directory.
+        self.run_cli(["icacls", folder, "/deny", "*S-1-1-0:(WD)"])
+        try:
+            result = self.factory(app, "doctor", job_id, code=1)
+            self.assertIn(f"Write check passed: {self.data}", result.stdout)
+            self.assertIn(f"write denied in {folder}", result.stderr)
+        finally:
+            self.run_cli(["icacls", folder, "/remove:d", "*S-1-1-0"])
+        self.assertIn(f"Write check passed: {folder}", self.factory(app, "doctor", job_id).stdout)
+
     def test_worktree_gate_and_recovery(self):
         app = self.app("Mixed project")
         job_id = self.local_job(app).stdout.strip()

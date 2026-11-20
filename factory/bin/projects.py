@@ -12,7 +12,7 @@ from uuid import uuid4
 from runtime import WINDOWS, exclusive_lock, replace_file
 
 FACTORY = Path(__file__).resolve().parents[1]
-VERSION = "3.0.0"
+VERSION = "3.0.1"
 
 
 def data_parent():

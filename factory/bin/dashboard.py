@@ -235,10 +235,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("start", "stop", "serve"))
     parser.add_argument("token", nargs="?")
+    parser.add_argument("--link", action="store_true", help="print a clickable dashboard address for chat")
     args = parser.parse_args()
+    if args.link and args.action != "start":
+        parser.error("--link is available with start")
     try:
         if args.action == "start":
-            print(start())
+            url = start()
+            print(f"Live factory dashboard: [{url}]({url})" if args.link else url, flush=True)
         elif args.action == "stop":
             stop()
         elif args.token:

@@ -44,6 +44,15 @@ extends = ":workspace"
 
 Run `python install.py --skip-permissions` to install or update just the factory. To undo an automatic setup, remove the installer-added `default_permissions = "factory"` line and both `permissions.factory` tables, then open a fresh chat. Use `--skip-permissions` on future updates to keep that choice.
 
+### If a run keeps asking for approval
+
+In the affected project chat, enter **`$factory doctor`**. For a job already in progress, use **`$factory doctor <job-id>`** with the ID from the board. The command prints the installed version and data path and tries a temporary file write with that chat's permissions. The job-specific check also tests its actual artifact folder. Run it with ordinary permissions so the result reflects what the factory can do during a job.
+
+- **Write denied.** Compare the printed **Factory data** path with the enabled folder in your permission profile. Check any `SOFTWARE_FACTORY_HOME` override on this machine. Select **Custom (config.toml)** in the parent project chat if you use the installer profile. After changing a configuration file, open a fresh chat and repeat the check. Workers inherit the parent's permission mode. [Codex subagent permissions](https://learn.chatgpt.com/docs/agent-configuration/subagents#approvals-and-sandbox-controls)
+- **Write check passed.** The parent can save the intake report in the tested folder. Starting specification automatically assigns reviewers according to the project's risk and surface rules. Creating the linked worktree also writes branch and worktree metadata under the application's `.git` folder. Codex can still request approval for this Git operation. [Codex permission profiles](https://learn.chatgpt.com/docs/permissions)
+
+If you also want Codex to review eligible approval requests while using the factory profile, you can set the top-level `approvals_reviewer = "auto_review"` in your user config with an `on-request` or supported granular approval policy. This is an account-wide choice for chats using that config. Availability depends on your organization's settings. [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+
 ## Update an existing global installation
 
 Finish active factory runs and stop the shared dashboard. Paste the same installation prompt into Codex to fetch and install the current version. For a manual update from an existing source checkout, run `git fetch origin --prune`, `git switch master`, `git pull --ff-only`, and `python install.py`. Open a fresh project chat after the update. The next run starts the updated board.
@@ -52,7 +61,7 @@ Finish active factory runs and stop the shared dashboard. Paste the same install
 
 Open the application in Codex and invoke `$factory`. Its Git checkout needs a committed HEAD. The factory resolves subfolders and linked worktrees to the primary checkout and records a project ID in local Git configuration. Use `$factory status` to see the actual project, runtime version and jobs. Codex may ask for approval to record the project ID in Git. Use the global launcher's `--project "<checkout>"` option if your chat has several project folders.
 
-The factory asks whether to check GitHub for labeled issues or work disconnected. In a disconnected chat, describe the request and send `/factory execute` or `$factory execute` when the brief is ready. Execution prints the shared dashboard URL. Each project has its own run owner and job limit. Waiting for clarification or a human merge frees a slot.
+The factory asks whether to check GitHub for labeled issues or work disconnected. In a disconnected chat, describe the request and send `/factory execute` or `$factory execute` when the brief is ready. When execution starts or resumes, the factory posts the clickable dashboard address in chat before dispatching work. Enter `$factory dashboard` to show it again during a run. Each project has its own run owner and job limit. Waiting for clarification or a human merge frees a slot.
 
 ## Configure validation and parallelism
 

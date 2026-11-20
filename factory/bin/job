@@ -19,7 +19,8 @@ Usage:
   job --run <token> release      release the orchestrator slot
   job feedback <job>             needs-human → build, with your feedback (stdin) as feedback-<k>.md
   job reject <job>               needs-info or needs-human → rejected, with your reason (stdin) as rejection.md
-  job agents <job> <json>        record the routed agent set (called by factory/bin/route)
+  job route <job>                record the configured reviewers for accepted intake
+  job agents <job> <json>        explicitly assign a reviewer set to accepted intake
   job sync <job>                 refresh reviews and gate from the job's files
   job summary [<job>...]         table of jobs: issue, stage, PR, cost, time
 
@@ -194,6 +195,29 @@ def round_dir(job, n=None):
 
 def reviewers(job):
     return list(job["agents"]["reviewers"])
+
+
+def assign_agents(job, agents):
+    require(job["stage"] == "intake" and (job["intake"] or {}).get("decision") == "ACCEPT",
+            "route only an intake job that intake ACCEPTed")
+    selected = agents.get("reviewers") if isinstance(agents, dict) else None
+    require(isinstance(selected, dict) and "code" in selected and
+            selected.keys() <= {"code", "security", "ui", "ux"} and
+            all(isinstance(value, str) and value for value in selected.values()),
+            "invalid reviewer routing")
+    job["agents"] = agents
+
+
+def route_intake(job):
+    intake = job["intake"] or {}
+    require(intake.get("decision") == "ACCEPT", "routing requires DECISION: ACCEPT in intake.md")
+    risk = intake["risk"]
+    require(risk in CONFIG["routing"], f"unknown intake risk: {risk!r}")
+    selected = dict(CONFIG["routing"][risk])
+    for surface in intake["surfaces"]:
+        require(surface in CONFIG["surface_reviewers"], f"unknown intake surface: {surface!r}")
+        selected.update(CONFIG["surface_reviewers"][surface])
+    assign_agents(job, {"reviewers": selected})
 
 
 # ---- Issue → issue.md ------------------------------------------------------
@@ -378,7 +402,8 @@ def advance(job, stage, *, handoff=None):
                     "issue is closed or no longer labeled for the factory")
         title = f"### Factory intake: {decision}"
         if stage == "spec":
-            require(job["agents"], "route the job first: factory/bin/route " + job["id"])
+            if not job["agents"]:
+                route_intake(job)
             i = job["intake"]
             title += f" (risk {i['risk']}, surfaces: {', '.join(i['surfaces']) or 'none'})"
         if not disconnected(job):
@@ -751,19 +776,6 @@ def cmd_reject(job, text):
     print(f"{job['id']}: rejected")
 
 
-def cmd_agents(job, spec):
-    if job["stage"] != "intake" or (job["intake"] or {}).get("decision") != "ACCEPT":
-        die(f"{job['id']}: route only an intake job that intake ACCEPTed")
-    agents = json.loads(spec)
-    selected = agents.get("reviewers")
-    require(isinstance(selected, dict) and "code" in selected and
-            selected.keys() <= {"code", "security", "ui", "ux"} and
-            all(isinstance(value, str) and value for value in selected.values()),
-            "invalid reviewer routing")
-    job["agents"] = agents
-    save(job)
-
-
 def elapsed(job):
     start = datetime.fromisoformat(job["started"].replace("Z", "+00:00"))
     end = datetime.fromisoformat(job["ended"].replace("Z", "+00:00")) if job["ended"] else datetime.now(timezone.utc)
@@ -810,8 +822,15 @@ def dispatch(argv):
             cmd_feedback(resolve(args[0]), sys.stdin.read())
         elif cmd == "reject" and len(args) == 1:
             cmd_reject(resolve(args[0]), sys.stdin.read())
+        elif cmd == "route" and len(args) == 1:
+            job = sync(resolve(args[0]))
+            route_intake(job)
+            save(job)
+            print(f"{job['id']}: reviewers " + ", ".join(f"{k} {v}" for k, v in job["agents"]["reviewers"].items()))
         elif cmd == "agents" and len(args) == 2:
-            cmd_agents(sync(resolve(args[0])), args[1])
+            job = sync(resolve(args[0]))
+            assign_agents(job, json.loads(args[1]))
+            save(job)
         elif cmd == "sync" and len(args) == 1:
             job = sync(resolve(args[0]))
             save(job)

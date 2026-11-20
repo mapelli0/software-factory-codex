@@ -1,6 +1,6 @@
 ---
 name: factory
-description: Run the software factory in GitHub or disconnected mode. Use for $factory, $factory run, $factory status, $factory cleanup, and /factory execute or $factory execute.
+description: Run the software factory in GitHub or disconnected mode. Use for $factory, $factory run, $factory status, $factory doctor, $factory dashboard, $factory cleanup, and /factory execute or $factory execute.
 ---
 
 # Software factory
@@ -8,9 +8,10 @@ description: Run the software factory in GitHub or disconnected mode. Use for $f
 Run from the selected application checkout or a subfolder. Resolve the absolute global launcher beside the installed skill (`$CODEX_HOME/skills/factory/factory.py`, normally `~/.codex/skills/factory/factory.py`). In the commands below, prefix every launcher command (including `status` and `register`) with `python "<launcher>" --project "<application>"`. If the project is ambiguous, ask which checkout to use.
 
 - `$factory cleanup` routes directly to `cleanup`. Show the checked project, exact paths, backup and any pending work. On approval of the preview, run `cleanup --apply --expect <preview-id>` for that project. For a separate installation the operator identifies, pass `--legacy "<folder>"` on both calls. Report the result and backup. For tracked removals show the Git diff. Return after maintenance, without intake or a queue lookup.
-- `$factory dashboard` runs `dashboard start` and returns the live local link without claiming any queue. Use `dashboard stop` on an explicit stop request.
+- `$factory dashboard` runs `dashboard start --link` and posts its clickable address directly in the chat without claiming a queue. Use `dashboard stop` on an explicit stop request.
 - `$factory status` runs `status` and reports the project, global runtime version and jobs.
-- For execution, run `register` to obtain the project ID, jobs directory, checkout and concurrency. Read the job's JSON there. Use the installed factory-prefixed custom agents. The parent owns the pipeline and calls the Python tools.
+- `$factory doctor [job-id]` runs `doctor [job-id]` with the chat's ordinary permissions. Report the resolved factory data path and the folders where the temporary write succeeded or failed.
+- After the startup steps below, run `register` to obtain the project ID, jobs directory, checkout and concurrency. Read the job's JSON there. Use the installed factory-prefixed custom agents. The parent owns the pipeline and calls the Python tools.
 - `$factory run`: process available queue entries and resume existing jobs.
 - `$factory run <issue>`: process only the requested labeled issue.
 - For explicit user feedback, rejection or a reply, pass the user's text verbatim. Use `job feedback <issue>` or `job reject <issue>` with UTF-8 stdin. Post an authorized intake reply on the issue, then resume that issue. Run direct GitHub CLI commands from the application checkout. For an explicit new-feature request, create a labeled issue using the user's text as the body and run that issue.
@@ -27,7 +28,13 @@ Use the saved local job ID for resumption, status and operator feedback. A disco
 
 ## Run ownership and dispatch
 
-For an execution run, call `job claim --dashboard` and keep the token from stdout. Post the local dashboard URL from stderr in a progress update before starting job work. The dashboard refreshes automatically. If startup fails because the session cannot reach loopback, retry with `dashboard start` using the available permission flow. If the dashboard remains unavailable, report it and continue the run. For a mutation that does not start a job run, use `job claim`. Use `job claim --recover --dashboard` when recovering a run after confirming its old workers have stopped. Put `--run <token>` before every job command during the run, including `queue`. Call `route --run <token> <id>` to route. Release with `job --run <token> release` after the workers have stopped.
+Before the first execution in a chat, run `doctor` with ordinary permissions, before registration, claiming a run or dispatching a worker. Use `doctor <job-id>` when resuming a known job or diagnosing an artifact access error. If access is missing, surface the exact folder once so the operator can select the factory profile or grant that folder. An elevated probe cannot verify the chat's access. Resume when the ordinary probe succeeds or the operator chooses to continue with individual approvals.
+
+Once the operator starts execution, perform routine job writes, reviewer assignment and stage transitions under the chat's existing permissions. Report progress directly. If Git or another tool requires approval, use the normal approval flow and identify the operation and affected project. A high intake risk determines review coverage. Keep scope decisions, required tool approvals and the human merge with the operator.
+
+At the start of **every execution or resume**, including a disconnected execute and a GitHub queue with no work, run `dashboard start --link` after the access check. **Immediately send the returned line as a visible chat message**, with its actual clickable address, even when the board was already running. Do this before claiming a run, looking up issues, creating a job or spawning a worker. Tool output alone is invisible to some users. If loopback access requires approval, use the normal permission flow for the dashboard command. If startup still fails, tell the operator the reason and continue the job. Only publish a URL returned by a successful startup.
+
+Then call `job claim` and keep the token private. For a mutation outside an execution run, use `job claim` directly. Use `job claim --recover` when recovering a run after confirming its old workers have stopped. Put `--run <token>` before every job command during the run, including `queue`. Release with `job --run <token> release` after the workers have stopped.
 
 In GitHub mode, the queue prints tab-separated rows with action, issue, job ID, stage and note. Start `new` and `resume` rows within job and subagent capacity. For a new issue, call `job create <issue>`. Refresh the queue as jobs finish. A run ends when it has no runnable work and no live workers. Summarize completed jobs and anything waiting for an author or operator.
 
@@ -37,7 +44,7 @@ Every worker receives the project ID and job ID, absolute artifact folder, globa
 
 ## Stages
 
-1. **Intake.** Spawn `factory-intake` for GitHub or `factory-intake-conversation` in execution mode for a disconnected job. The agent writes `intake.md`. On ACCEPT, run `route`, then `job advance <id> spec` to create the worktree. Otherwise advance to `needs-info` or `rejected` as indicated. If the queue resumes an answered needs-info job, advance to `intake` first.
+1. **Intake.** Spawn `factory-intake` for GitHub or `factory-intake-conversation` in execution mode for a disconnected job. The worker returns the complete intake report. Save it verbatim as `intake.md` in the registered job folder using ordinary project-chat permissions. Reuse a completed report already on disk when resuming. On ACCEPT, call `job advance <id> spec` once. It assigns the configured reviewers and creates the worktree. Otherwise advance to `needs-info` or `rejected` as indicated. If the queue resumes an answered needs-info job, advance to `intake` first.
 2. **Spec.** Spawn `factory-spec-writer` in the context of the worktree. When `spec.md` exists, advance to `build`.
 3. **Build.** Spawn `factory-builder` with the prior gate logs, review findings or feedback. A READY result advances to `gate` after the branch and, in GitHub mode, draft PR are verified. BLOCKED advances to `needs-human`. A refusal from the state script is an actionable result. Resolve it through the worker or report the blocker.
 4. **Gate.** Run `gate <id>`. PASS advances to `review`. FAIL advances to `build` or `needs-human` at the round limit. A setup error is a blocker. The gate is required before any review.
