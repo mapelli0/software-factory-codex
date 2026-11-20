@@ -1,60 +1,14 @@
 """Platform-specific primitives for the factory command line."""
 
 import errno
-import json
 import os
 import shutil
 import subprocess
 import time
 from contextlib import contextmanager
-from functools import cache
 from pathlib import Path
 
 WINDOWS = os.name == "nt"
-PROJECT_FILE = ".factory-project.local.json"
-
-
-def validate_project(factory, checkout):
-    """Resolve the root of an external application Git checkout."""
-    home = factory.parent.resolve()
-    project = Path(checkout).expanduser().resolve(strict=True)
-    if project.is_relative_to(home) or home.is_relative_to(project):
-        raise ValueError("the application checkout and factory directory must not overlap")
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel", "--verify", "HEAD"],
-        cwd=project, capture_output=True, encoding="utf-8", errors="replace",
-    )
-    roots = result.stdout.splitlines()
-    if result.returncode != 0 or not roots or Path(roots[0]).resolve() != project:
-        raise ValueError("select the root of an application Git checkout with a committed HEAD")
-    return project
-
-
-@cache
-def project_checkout(factory):
-    """Read the local binding, with the original layout for legacy installs."""
-    binding = factory.parent / PROJECT_FILE
-    if not binding.exists():
-        return factory.parent
-    settings = json.loads(binding.read_text(encoding="utf-8"))
-    checkout = settings.get("checkout") if isinstance(settings, dict) else None
-    if not isinstance(checkout, str) or not Path(checkout).is_absolute():
-        raise ValueError(f"{PROJECT_FILE} must contain an absolute checkout path")
-    return validate_project(factory, checkout)
-
-
-def check_job_checkout(factory, project, job):
-    bound = job.get("project_checkout")
-    if bound is None and project == factory.parent:
-        return  # legacy in-repository jobs
-    if not bound or Path(bound).resolve() != project:
-        raise ValueError(f"{job['id']}: job belongs to a different application checkout")
-    worktrees = factory.parent / ".worktrees"
-    expected = worktrees / job["id"]
-    if Path(job["worktree"]).resolve() != expected or expected.resolve() != expected:
-        raise ValueError(f"{job['id']}: worktree must be under the factory directory")
-
-
 if WINDOWS:
     import msvcrt
 else:
@@ -84,25 +38,44 @@ def exclusive_lock(path):
         yield
 
 
-def check_command(factory, config):
+def replace_file(source, destination):
+    """Allow brief Windows sharing violations while the live board reads state."""
+    for attempt in range(10):
+        try:
+            source.replace(destination)
+            return
+        except PermissionError as error:
+            if not WINDOWS or error.winerror not in (5, 32) or attempt == 9:
+                raise
+            time.sleep(0.025)
+
+
+def run_checks(directory, config, worktree):
     platform = "windows" if WINDOWS else "linux"
-    default = ("pwsh", "checks.ps1") if WINDOWS else ("bash", "checks.sh")
-    settings = config.get("checks", {}).get(platform, {})
-    shell = settings.get("shell", default[0])
-    script = settings.get("script", default[1])
-    entry = (factory / script).resolve()
-    if not entry.is_relative_to(factory.resolve()) or not entry.is_file():
-        raise FileNotFoundError(f"Factory check script not found: {entry}")
-    executable = shutil.which(shell)
-    if not executable:
-        raise FileNotFoundError(f"Factory check interpreter not found: {shell}")
-    args = ["-NoProfile", "-NonInteractive", "-File"] if WINDOWS else []
-    return [executable, *args, str(entry)]
-
-
-def run_checks(factory, config, worktree):
-    cmd = check_command(factory, config)
-    return subprocess.run(
-        cmd, cwd=worktree, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        encoding="utf-8", errors="replace",
-    )
+    recipe = config["checks"][platform]
+    commands = recipe.get("commands")
+    if commands is None:
+        entry = (directory / recipe["script"]).resolve(strict=True)
+        if not entry.is_relative_to(directory.resolve()):
+            raise ValueError("invalid check script location")
+        if "project_script" in recipe:
+            root = Path(worktree).resolve()
+            project_entry = root / recipe["project_script"]
+            if project_entry.resolve() != project_entry or not project_entry.is_relative_to(root):
+                raise ValueError("check script points outside the job worktree")
+            if project_entry.read_bytes().replace(b"\r\n", b"\n") != entry.read_bytes().replace(b"\r\n", b"\n"):
+                raise ValueError("check script differs from the trusted job policy")
+            entry = project_entry
+        flags = ["-NoProfile", "-NonInteractive", "-File"] if WINDOWS else []
+        commands = [[recipe["shell"], *flags, str(entry)]]
+    output = []
+    for command in commands:
+        executable = shutil.which(command[0])
+        if not executable:
+            raise FileNotFoundError(f"check command not found: {command[0]}")
+        result = subprocess.run([executable, *command[1:]], cwd=worktree, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, encoding="utf-8", errors="replace")
+        output.append(result.stdout)
+        if result.returncode:
+            break
+    return subprocess.CompletedProcess(commands, result.returncode, "\n".join(output))

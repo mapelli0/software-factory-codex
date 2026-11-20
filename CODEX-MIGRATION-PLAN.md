@@ -1,8 +1,10 @@
 # Migrate Software Factory v2 to Codex
 
+The global factory is implemented on `master`. Use [INSTALL.md](INSTALL.md) for the current setup. The original per-application installation below records the earlier port.
+
 ## Scope and target
 
-Port the template in [software-factory-claude-code-v2](https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2) to the standalone `software-factory-codex` workspace. The source is a template inside the ZazenCodes repository. The installer now asks for the application checkout and a separate factory directory. Start Codex from that factory directory so it discovers the skill and agent profiles. The factory stores its binding locally and keeps its tools, checks, job state and worktrees outside the application checkout.
+Port the template in [software-factory-claude-code-v2](https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code-v2) to the standalone `software-factory-codex` workspace. The source is a template inside the ZazenCodes repository. The installer defaults to the current local Codex project's primary folder when suitable and asks for the application checkout if needed. Start Codex from that factory directory so it discovers the skill and agent profiles. The factory stores its binding locally and keeps its tools, checks, job state and worktrees outside the application checkout.
 
 Treat C#/.NET as the primary backend stack and React as the first supported UI stack. Cover backend-only, UI-only and mixed repositories, with the same install contract for other UI stacks.
 
@@ -99,3 +101,74 @@ dotnet test -c Release --no-restore
 On first use in a chat, ask whether to check the labeled GitHub queue or work disconnected. Add `intake-conversation` to scope a local request from the conversation. The operator starts the pipeline with `/factory execute` or `$factory execute`. Create the job only at that point, storing the brief in `issue.md` and pinning the local base commit. Reuse the worktree, gates, review and approval stages. Hand off a local branch for human merge, and record completion when Git contains the gated commit.
 
 The port lives in this workspace. Live GitHub and Linux or WSL pilots are still pending.
+
+## Global release — one factory for all local projects
+
+Install the factory once per user on each computer. Open an application in Codex and invoke `$factory` there. The first execution starts one live dashboard. Runs from other projects reuse its URL. Each chat continues to drive its selected project. Opening the board only reads local job records, so viewing all projects never starts another project's queue.
+
+### 1. Install once and register projects on first use
+
+Keep one versioned copy of the Python tools, default settings and dashboard outside application checkouts. The installer supplied by this repository installs the `$factory` skill and nine factory-prefixed agent roles in Codex's user-level discovery folders. Make repeat installs update only factory-owned files and preserve unrelated personal skills and agents. Test discovery from a fresh application chat on native Windows without requiring Windows symlink privileges. [Codex skill locations](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills) and [personal custom agents](https://learn.chatgpt.com/docs/agent-configuration/subagents#custom-agents).
+
+On first use, resolve the application from the current Git checkout, including from a subfolder. Link related worktrees to the registered checkout. Ask which project to use when the context is ambiguous. Keep a machine-local registry mapping a stable project ID to the checkout and display name. Registration also works without a Git remote. Detect a moved checkout or a second clone and resolve its identity before starting work. Continue to ask whether to check GitHub for labeled issues or collect a disconnected brief. Only the explicit execute command starts that brief, and the operator retains the merge decision.
+
+### 2. Keep project settings small and portable
+
+| Where | What belongs there |
+| --- | --- |
+| Shared installation | Common workflow, agents, dashboard, validation runner and default settings. |
+| `.factory/project.json` in the application repo | Optional, version-controlled overrides for the project name, maximum active jobs, base branch, queue labels and validation commands or existing CI script paths. Validate the file, inherit omitted settings from the shared defaults, and explain invalid values before starting work. |
+| Application `AGENTS.md` | Human-readable build, test and preview guidance, such as the .NET solution, React workspace and how the UI connects to the API. Reuse existing instructions and CI scripts. |
+| Local user data outside both repos | Checkout registrations, machine paths, project-specific job records and worktrees, locks, dashboard port and server state. An update of the shared tools preserves these files. |
+
+A project can use defaults or commit just the overrides its team needs. This example gives a service two job slots.
+
+```json
+{
+  "name": "Orders API",
+  "concurrency": 2
+}
+```
+
+Keep the gate runner in the shared install. At job creation, record the effective validation policy and the trusted base revision supplying the project's check definitions. Run these checks against the job worktree. Protect the selected check definitions so a change under review cannot weaken its own checks. Allow Windows and Linux commands to use the project's existing PowerShell, Bash, .NET or frontend scripts.
+
+### 3. Make execution and capacity project-aware
+
+Pass the project ID through `job`, `gate`, `route` and every worker. Scope run ownership, issue lookups, job files, Git commands and recovery to that project. Give separate projects independent owners so two chats can make progress at the same time. Use the project ID plus the existing job ID as the complete identifier, including in artifact links. Allocate preview ports across the installation so two first jobs can each start their own frontend and backend.
+
+Apply the project's `concurrency` limit to the combined count of active GitHub and disconnected jobs. Reserve a slot under the project lock on creation or resumption. Waiting for input or human merge releases the slot. If a limit is reduced below current usage, finish active jobs and admit the next job when capacity is available. Keep three as the inherited project default. The number of reviewers that can run at once also depends on the Codex session's worker capacity.
+
+### 4. Serve one live board
+
+Start or reuse one loopback server under a user-wide startup lock. Save its local port for reuse across restarts when available and print the actual URL in every run. Default to **All projects**, with a project filter and active-versus-configured counts. Show the project name on every card and job detail, and qualify links with the stable project ID. For example, **Orders API · #42** and **Storefront · #42** must open different jobs. Show the waiting reason and handoff state for both intake modes. Serve only registered job artifacts and keep the board useful when a checkout is offline.
+
+### 5. Migrate and prove the change on Windows
+
+1. Add the migration and retirement procedure below to global setup. Run it for each existing installation and keep an inventory on this computer so interrupted migrations can resume.
+2. Pilot two projects with the same issue number, different limits (two jobs and one job), and different checks. Exercise both GitHub and disconnected intake. Verify that each project reaches its own limit, an extra job waits, concurrent chats respect ownership, and waiting jobs resume only into an available slot.
+3. Start both projects together. Verify one dashboard URL, correct project labels and artifact links, live updates, distinct preview ports, and independent restart and recovery. Confirm a failing .NET or React check blocks only its own job. Confirm ordinary runs add no factory runtime files to application repos.
+4. Replace the per-application instructions in `README.md`, `INSTALL.md`, the skill and role prompts with the verified global workflow. Include installation from the repo, first-project registration, configuration, updates and migration. Verify the same behavior on Linux or WSL before declaring parity.
+
+### Retire existing per-project installations
+
+1. **Find old copies.** During global setup, offer a read-only scan of registered application checkouts and the parent folders the operator selects. Accept additional factory folders directly, since an external install can live anywhere. Look for `.factory-project.local.json` and also the combination of the local factory skill, role profiles and `factory/bin/job`. Older bundled installs can lack a binding. List each candidate, its associated project when known, and the scan roots, including any inaccessible folders. Identify the maintained source checkout, new global install, backups and ambiguous matches separately. A folder name or lone matching file is insufficient evidence for removal.
+2. **Establish what must be kept.** Preview the exact paths proposed for retirement. Compare files to known factory releases and flag local edits, user-authored files, and shared settings such as `AGENTS.md`, `.codex/config.toml` and `.gitignore`. Inventory ignored job artifacts, custom checks, `PROJECT.local.md`, active owners, pending handoffs and linked Git worktrees, including dirty or unmerged work. Mark a project as pending while a run, unresolved job or worktree still needs the old install. Keep its global queue disabled until cutover so two factories cannot claim the same issue.
+3. **Preserve and verify.** Once the old workers have stopped, use the old dashboard's own stop command. Save private settings and a restorable backup outside Codex project and skill discovery paths. Import project settings and completed history, compare job IDs and artifact contents, and run the global preflight with the project's checks. Preserve custom scripts before retiring their old paths. A failed or interrupted migration must leave a recoverable copy and allow a retry without duplicate jobs.
+4. **Remove the local runtime.** After the operator approves the displayed changes, archive an exclusively factory-owned installation, or remove the confirmed factory files individually from a mixed project. Include the old skill, role profiles, launchers, dashboard and obsolete bindings. In shared files, remove only entries with established factory ownership and surface ambiguous edits for review. Keep application source, licenses in use and unrelated Codex settings. For tracked factory files, prepare a reviewable Git change in the affected repository so a fresh checkout also receives the cleanup. Keep backup deletion as a separate, explicit action.
+5. **Prove each cutover.** From a fresh Codex chat in the application, have `$factory status` report the selected project, global runtime path and version. Check that only the global factory skill and roles are available, that the shared dashboard shows the expected history, and that the old server is stopped. Repeat discovery and check every inventoried path. Report each installation as retired, pending, or needing review, with its reason. A project passes when it resolves to the global copy and its old runtime is absent from the active locations. Provide the same read-only check after setup for other folders and computers.
+
+Test retirement on Windows with both a separate factory folder and a bundled installation that has no binding. Include unrelated agents, a locally edited check, tracked factory files, an unfinished job, an inaccessible folder and a maintained source checkout. Verify that a second run makes no further changes after a successful cutover and that a backup can restore a stopped installation.
+
+### Run `$factory cleanup` from an application project
+
+Add `$factory cleanup` to the global skill and document it in `README.md` and `INSTALL.md`. It runs the same migration used during global setup, on demand for the current project. Route it directly to maintenance before intake or any GitHub queue lookup. Document how to invoke the installed global cleanup tool directly if a legacy project skill handles `$factory` in an existing chat.
+
+1. Resolve the application from its Git root when invoked from a subfolder or linked worktree. Show the selected checkout. Inspect it for legacy factory files and consult the local migration inventory for any external installation already associated with it. Keep the scan scoped to that project. Include an external folder in the migration preview only after verifying its binding to the selected checkout.
+2. If the scan completes and finds no legacy files or known bound installation, report **Already clean**, name the project and show the locations checked. This result makes no changes. Report **Needs review** when access or conflicting evidence prevents a complete check. Report **Pending** with the reason when an old run or unfinished work still needs the installation.
+3. For a confirmed installation, show what will be migrated, backed up and removed. After the operator approves that preview, perform the retirement procedure above for this project, including registration if needed, import verification and a reviewable diff for tracked removals. Report **Migrated** after the follow-up scan and global runtime verification pass. An interrupted run resumes from the saved inventory.
+
+In the Windows pilot, invoke the command from a subfolder of a project with a bundled legacy copy, migrate it, and run it again. The second run must report **Already clean** with no new diff, backup or duplicate job. Also exercise a project with unfinished work and verify that its jobs and files remain available, and that another registered project's state is untouched throughout.
+
+### Windows verification
+
+The native integration tests use disposable user profiles, Git checkouts and a real loopback server. Run `python -m unittest discover -s tests -v` for installation, project identity, concurrency across intake modes, job recovery, dashboard sharing, and cleanup. The queue test supplies GitHub CLI responses locally. Run `python tests/windows_pilot.py` for actual .NET builds, React rendering checks and dashboard interactions against the live server using a browser DOM implementation. It downloads its frontend dependencies into a temporary project. Live GitHub PR and Linux or WSL pilots remain separate.

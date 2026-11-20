@@ -10,14 +10,31 @@ Open any local Codex chat on Windows and paste this message. Codex handles the d
 
 ```text
 Install Software Factory for all my Codex projects on this Windows computer.
-Download the main branch of https://github.com/mapelli0/software-factory-codex
-to a temporary folder, run install.py, and verify that the factory skill and
-all nine agents are installed.
+Download https://github.com/mapelli0/software-factory-codex to a temporary
+folder, run install.py, and verify that the factory skill and all nine agents
+are installed.
 ```
 
 When Codex confirms the installation, open a fresh chat in one of your Git projects and type `$factory status`. It shows the selected project and the installed factory version. If the project already has an older factory, type `$factory cleanup` to preview its migration.
 
-The global installer and current usage instructions are on the [main branch](https://github.com/mapelli0/software-factory-codex/tree/main). For prerequisites, project settings and updates, see the [installation guide](https://github.com/mapelli0/software-factory-codex/blob/main/INSTALL.md).
+Projects can share settings such as job limits and validation commands in `.factory/project.json`. See the [installation guide](INSTALL.md) for prerequisites, updates, and a C# and React example.
+
+## Start a job
+
+In the application chat, choose an intake mode.
+
+- **GitHub.** Label an open issue `factory`, then enter `$factory run 42` for issue 42 or `$factory run` for the queue. The factory builds and reviews the change and hands you a PR to merge.
+- **Disconnected.** Describe the request in chat. The intake agent helps scope it and waits for `/factory execute` or `$factory execute`. The factory uses the conversation as the issue brief and hands you a local branch. A GitHub remote is optional in this mode.
+
+Use `$factory status` to see progress and what needs your attention. You can give feedback on a job and resume from its saved state.
+
+## Local dashboard
+
+The factory starts a local dashboard at the beginning of a run and posts the link in chat. Keep the tab open to follow stage changes, checks and reviews. The dashboard is available on the machine running the factory and stays up after the run.
+
+The board opens on **All projects**. Each card and detail view names its project. Use the project selector to see how many slots each application is using. To reopen the board, invoke `$factory dashboard`. Use `$factory cleanup` in an application to check for an older installation, preview its migration, and verify the result after cutover.
+
+The dashboard displays job artifacts and check output. The [historical examples](examples/jobs) show what the workflow records. See [DESIGN.md](DESIGN.md) for the runtime and the [migration plan](CODEX-MIGRATION-PLAN.md) for the porting decisions and pending verification.
 
 ## Thanks and license
 
