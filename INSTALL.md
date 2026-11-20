@@ -18,13 +18,39 @@ The installer prints the absolute launcher path. It copies the skill and runtime
 
 Job state, the project registry, preview port assignments, backups and dashboard state live in `%LOCALAPPDATA%\software-factory-codex` on Windows and the user's XDG data directory on Linux. Set `SOFTWARE_FACTORY_HOME` to choose a different permanent data directory outside your application checkouts. Keep that setting consistent across chats. Only portable project settings belong in Git.
 
+## Shared folder permissions
+
+An ordinary install or update configures write access to the shared data folder automatically when your user `config.toml` has no explicit permission settings. The installer creates a profile named `factory`, selects it as the user default, and prints the exact folder. It adds that one folder to the usual project workspace. Every chat using this profile can write there, including chats for other projects. This lets the factory update jobs and dashboard state across projects without repeated approval for those writes.
+
+Open a **fresh chat** after installing. If needed, select **Custom (config.toml)** in the permissions control below the message box. Installation, protected Git files, and network actions such as pushing to GitHub can still require approval. Your organization's policy determines which modes are available. [Codex permission modes](https://learn.chatgpt.com/docs/permission-modes)
+
+If the installer reports **Kept your existing** settings, you can keep using the factory with your current approvals. To grant the data folder access manually, open `config.toml` under `CODEX_HOME` (normally `~/.codex`).
+
+- With an existing named workspace profile, add the printed **Local data** path to that profile's `workspace_roots` table. If the table already exists, add only the path line.
+- With the older `sandbox_mode = "workspace-write"` setting, add the printed absolute path to the `writable_roots` list under `[sandbox_workspace_write]`. Keep any existing entries. [Codex configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+- For a managed profile, ask your administrator to add the folder to the permitted workspace roots. [Codex permission profiles](https://learn.chatgpt.com/docs/permissions)
+
+For manual setup in a config with no existing permission settings, the Windows example below shows the complete addition. Place `default_permissions` above the first table and add the two tables at the end of the file. For a custom location or Linux, use the path printed by the installer with forward slashes.
+
+```toml
+default_permissions = "factory"
+
+[permissions.factory]
+extends = ":workspace"
+
+[permissions.factory.workspace_roots]
+"~/AppData/Local/software-factory-codex" = true
+```
+
+Run `python install.py --skip-permissions` to install or update just the factory. To undo an automatic setup, remove the installer-added `default_permissions = "factory"` line and both `permissions.factory` tables, then open a fresh chat. Use `--skip-permissions` on future updates to keep that choice.
+
 ## Update an existing global installation
 
 Finish active factory runs and stop the shared dashboard. Paste the same installation prompt into Codex to fetch and install the current version. For a manual update from an existing source checkout, run `git fetch origin --prune`, `git switch master`, `git pull --ff-only`, and `python install.py`. Open a fresh project chat after the update. The next run starts the updated board.
 
 ## Open an application
 
-Open the application in Codex and invoke `$factory`. Its Git checkout needs a committed HEAD. The factory resolves subfolders and linked worktrees to the primary checkout and records a project ID in local Git configuration. Use `$factory status` to see the actual project, runtime version and jobs. Grant the session access to the application's Git metadata and its factory data directory when prompted. Use the global launcher's `--project "<checkout>"` option if your chat has several project folders.
+Open the application in Codex and invoke `$factory`. Its Git checkout needs a committed HEAD. The factory resolves subfolders and linked worktrees to the primary checkout and records a project ID in local Git configuration. Use `$factory status` to see the actual project, runtime version and jobs. Codex may ask for approval to record the project ID in Git. Use the global launcher's `--project "<checkout>"` option if your chat has several project folders.
 
 The factory asks whether to check GitHub for labeled issues or work disconnected. In a disconnected chat, describe the request and send `/factory execute` or `$factory execute` when the brief is ready. Execution prints the shared dashboard URL. Each project has its own run owner and job limit. Waiting for clarification or a human merge frees a slot.
 

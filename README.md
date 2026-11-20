@@ -11,11 +11,13 @@ Open any local Codex chat on Windows and paste this message. Codex handles the d
 ```text
 Install Software Factory for all my Codex projects on this Windows computer.
 Download https://github.com/mapelli0/software-factory-codex to a temporary
-folder, run install.py, and verify that the factory skill and all nine agents
-are installed.
+folder and run python install.py. Set up reusable write access to the shared
+factory data folder. Keep any permission settings I've already chosen.
+Verify the skill and all nine agents, and tell me whether folder access was
+configured or needs my attention.
 ```
 
-When Codex confirms the installation, open a fresh chat in one of your Git projects and type `$factory status`. It shows the selected project and the installed factory version. If the project already has an older factory, type `$factory cleanup` to preview its migration.
+Open a fresh chat in one of your Git projects. If the installer configured folder access, choose **Custom (config.toml)** in the chat's permissions control if needed. Type `$factory status` to see the selected project and factory version. For an older per-project installation, type `$factory cleanup` to preview its migration. [How folder access works](INSTALL.md#shared-folder-permissions)
 
 Projects can share settings such as job limits and validation commands in `.factory/project.json`. See the [installation guide](INSTALL.md) for prerequisites, updates, and a C# and React example.
 

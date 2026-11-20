@@ -13,10 +13,23 @@ from runtime import WINDOWS, exclusive_lock, replace_file
 
 FACTORY = Path(__file__).resolve().parents[1]
 VERSION = "3.0.0"
-if WINDOWS:
-    DEFAULT_HOME = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local")
-else:
-    DEFAULT_HOME = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+
+
+def data_parent():
+    if not WINDOWS:
+        return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+    local = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local")
+    # In a packaged Codex session, LocalAppData can point inside a per-chat container.
+    # The directory above Packages is the account's persistent (possibly redirected) LocalAppData.
+    for part in local.parents:
+        if part.name.lower() == "packages" and any(
+            name.lower().startswith("#!sandbox.") for name in local.relative_to(part).parts
+        ):
+            return part.parent
+    return local
+
+
+DEFAULT_HOME = data_parent()
 HOME = Path(os.environ.get("SOFTWARE_FACTORY_HOME") or DEFAULT_HOME / "software-factory-codex").expanduser().resolve()
 REGISTRY = HOME / "registry.json"
 REGISTRY_LOCK = HOME / "registry.lock"
