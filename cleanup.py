@@ -12,10 +12,12 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from project_skill import ENTRY_FILES, SKILL_DIR
+
 
 SOURCE = Path(__file__).resolve().parent
 MARKER = {"product": "software-factory-codex", "layout": "project-local-v1"}
-SKILL = Path(".agents/skills/factory")
+SKILL = SKILL_DIR
 AGENTS = Path(".codex/agents")
 BINDING = ".factory-project.local.json"
 JOB_ID = re.compile(r"[0-9]{3,}-[a-z0-9-]+")
@@ -231,17 +233,38 @@ def owned_jobs(plan, base, checkout):
         plan.dirs.add(workdir)
 
 
-def in_project(plan, base, project_id):
+def project_skill(plan, project):
+    folder = project / SKILL_DIR
+    if folder.resolve() != folder or not folder.is_dir():
+        return
+    for name, content in ENTRY_FILES.items():
+        path = folder / name
+        if not regular(path) or linked(path):
+            continue
+        expected = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        if digest(path) != expected:
+            plan.notes.append(f"Keep edited or unrelated skill file {path}")
+            continue
+        if not path.is_relative_to(plan.root):
+            raise ValueError(f"include the application root {project} to remove its factory skill registration")
+        plan.add_file(path, expected)
+        plan.prune_after(folder, project)
+
+
+def has_project_marker(base):
     marker = base / "installation.json"
-    if regular(marker):
-        try:
-            identity = data(marker)
-        except (UnicodeError, ValueError):
-            identity = None
-        if identity == MARKER:
-            owned_jobs(plan, base, base.parent)
-            plan.add_tree(base)
-            return
+    try:
+        return regular(marker) and data(marker) == MARKER
+    except (UnicodeError, ValueError):
+        return False
+
+
+def in_project(plan, base, project_id):
+    if has_project_marker(base):
+        owned_jobs(plan, base, base.parent)
+        project_skill(plan, base.parent)
+        plan.add_tree(base)
+        return
     portable = base / "project.json"
     if regular(portable):
         try:
@@ -272,6 +295,8 @@ def legacy(plan, base, known, core):
             continue
         target = leaf.resolve()
         target_base = target.parents[len(rel.parts) - 1] if len(target.parts) > len(rel.parts) else None
+        if target_base and target_base.name == ".factory" and has_project_marker(target_base):
+            continue  # Project-local installs never generate these legacy links.
         if target_base and target == target_base / rel and legacy_core(target_base, known):
             if regular(target_base / BINDING) and factory_origin(target_base) and (
                 target_base.is_relative_to(plan.root) and target_base not in plan.requested_clones
@@ -411,9 +436,8 @@ def verify_tree(plan, folder):
     if folder in plan.clones and verify_clone(folder, fingerprints()) != plan.clones[folder]:
         raise ValueError(f"application binding changed during scan: {folder}")
     if folder.name == ".factory":
-        marker = folder / "installation.json"
-        if not regular(marker) or data(marker) != MARKER:
-            raise ValueError(f"factory ownership marker changed: {marker}")
+        if not has_project_marker(folder):
+            raise ValueError(f"factory ownership marker changed: {folder / 'installation.json'}")
 
 
 def verify_file(plan, path):
@@ -448,11 +472,18 @@ def apply(plan):
     for config, expected in plan.keys.items():
         checked(plan, config)
         require_git("config", "--file", config, "--unset-all", "softwarefactory.projectid", "^" + expected + "$")
+    remaining_files = set(plan.files)
     for folder in sorted(plan.trees, key=lambda p: len(p.parts), reverse=True):
         verify_tree(plan, folder)
         if folder.name == ".factory":
             # Keep the ownership marker until the last removal so a retry can
             # still identify this installation after an interrupted cleanup.
+            for name in ENTRY_FILES:
+                entry = folder.parent / SKILL_DIR / name
+                if entry in remaining_files:
+                    verify_file(plan, entry)
+                    entry.unlink()
+                    remaining_files.remove(entry)
             for child in folder.iterdir():
                 if child.name == "installation.json":
                     continue
@@ -470,7 +501,7 @@ def apply(plan):
             folder.rmdir()
         else:
             remove_tree(folder)
-    for file in sorted(plan.files, key=lambda p: p.parent.name == "bin"):
+    for file in sorted(remaining_files, key=lambda p: p.parent.name == "bin"):
         verify_file(plan, file)
         file.unlink()
     for folder in sorted(plan.dirs, key=lambda p: len(p.parts), reverse=True):

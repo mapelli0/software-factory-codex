@@ -19,6 +19,7 @@ class ProjectInstallTest(unittest.TestCase):
         self.project.mkdir()
         self.root = self.project / ".factory"
         self.bin = self.root / "factory" / "bin"
+        self.entry = self.project / ".agents/skills/factory"
         self.globals = self.base / "unused global state"
         self.env = dict(os.environ, CODEX_HOME=str(self.globals / "codex"),
                         SOFTWARE_FACTORY_HOME=str(self.globals / "data"))
@@ -45,7 +46,10 @@ class ProjectInstallTest(unittest.TestCase):
     def test_install_and_disconnected_worktree(self):
         self.commit_application()
         self.install()
-        self.assertEqual(set(p.name for p in self.project.iterdir()), {".git", ".factory", "AGENTS.md"})
+        self.assertEqual(set(p.name for p in self.project.iterdir()), {".git", ".agents", ".factory", "AGENTS.md"})
+        manifest = (self.entry / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("\nname: factory\n", manifest)
+        self.assertIn(".factory/.agents/skills/factory/SKILL.md", manifest)
         self.assertTrue((self.root / ".agents/skills/factory/SKILL.md").is_file())
         self.assertEqual(len(list((self.root / ".codex/agents").glob("*.toml"))), 9)
         self.assertEqual(self.command(sys.executable, self.bin / "job", "project", cwd=self.base),
@@ -86,6 +90,53 @@ class ProjectInstallTest(unittest.TestCase):
         self.install()
         self.assertEqual(config.read_text(), '{"local": true}')
         self.assertTrue((self.bin / "gate").is_file())
+
+    def test_upgrade_registers_skill_and_repairs_missing_entry_files(self):
+        self.commit_application()
+        self.install()
+        skill = self.entry / "SKILL.md"
+        ignore = self.entry / ".gitignore"
+        for file in (skill, ignore):
+            file.unlink()
+        self.entry.rmdir()  # The previous installer only wrote the nested workflow.
+        history = self.root / "factory/jobs/001-existing/job.json"
+        history.parent.mkdir(parents=True)
+        history.write_bytes(b"preserved job")
+        other_skill = self.entry.parent / "another/SKILL.md"
+        other_skill.parent.mkdir()
+        other_skill.write_bytes(b"existing project skill")
+        self.install()
+        for file in (skill, ignore):
+            original = file.read_bytes()
+            file.unlink()
+            self.install()
+            self.assertEqual(file.read_bytes(), original)
+        self.assertEqual(history.read_bytes(), b"preserved job")
+        self.assertEqual(other_skill.read_bytes(), b"existing project skill")
+        self.assertEqual(self.command("git", "status", "--porcelain", "--untracked-files=all"),
+                         "?? .agents/skills/another/SKILL.md")
+
+    def test_project_skill_collision_preserves_existing_files(self):
+        self.commit_application()
+        self.entry.mkdir(parents=True)
+        skill = self.entry / "SKILL.md"
+        skill.write_bytes(b"own $factory")
+        self.install(success=False)
+        self.assertEqual(skill.read_bytes(), b"own $factory")
+        self.assertFalse(self.root.exists())
+        self.assertFalse((self.entry / ".gitignore").exists())
+
+    def test_reject_linked_project_skills_parent(self):
+        self.commit_application()
+        outside = self.base / "shared skills"
+        outside.mkdir()
+        try:
+            (self.project / ".agents").symlink_to(outside, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f"creating symlinks requires permission on this machine: {error}")
+        self.install(success=False)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertFalse(self.root.exists())
 
     def test_invalid_projects_and_existing_directory(self):
         self.install(success=False)

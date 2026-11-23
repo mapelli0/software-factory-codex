@@ -57,6 +57,64 @@ class CleanupTests(unittest.TestCase):
             cleanup.apply(plan)
         self.assertTrue(record.exists())
 
+    def test_project_skill_cleanup_stays_in_scope_and_preserves_neighbors(self):
+        app = self.root / "app"
+        base = self.factory(app)
+        skill = app / cleanup.SKILL_DIR
+        generated = [self.write(skill / name, text) for name, text in cleanup.ENTRY_FILES.items()]
+        neighbor = self.write(skill.parent / "another-skill/SKILL.md", "application skill")
+        local = self.write(skill / "notes.txt", "operator notes")
+        status, output = self.run_cleanup(base, "--apply")
+        self.assertNotEqual(status, 0)
+        self.assertIn("include the application root", output)
+        self.assertTrue(base.exists() and all(p.exists() for p in generated))
+        status, output = self.run_cleanup(app)
+        self.assertEqual(status, 0, output)
+        for path in generated:
+            self.assertIn(f"Remove file: {path}", output)
+            self.assertTrue(path.exists())
+        status, output = self.run_cleanup(app, "--apply")
+        self.assertEqual(status, 0, output)
+        self.assertFalse(base.exists() or any(p.exists() for p in generated))
+        self.assertTrue(local.exists() and neighbor.exists())
+
+    def test_remove_only_matching_generated_project_skill_files(self):
+        for name, content in cleanup.ENTRY_FILES.items():
+            with self.subTest(name=name):
+                app = self.root / name.strip(".")
+                self.factory(app)
+                skill = app / cleanup.SKILL_DIR
+                other_name = next(key for key in cleanup.ENTRY_FILES if key != name)
+                owned = self.write(skill / name, content)
+                edited = self.write(skill / other_name, "local edits\n")
+                plan = cleanup.scan(app, False)
+                owned.write_text("changed since preview")
+                with self.assertRaisesRegex(ValueError, "file changed"):
+                    cleanup.apply(plan)
+                self.assertTrue((app / ".factory/installation.json").is_file())
+                owned.write_text(content)
+                status, output = self.run_cleanup(app, "--apply")
+                self.assertEqual(status, 0, output)
+                self.assertFalse(owned.exists())
+                self.assertEqual(edited.read_text(), "local edits\n")
+
+    def test_project_skill_does_not_follow_or_unlink_user_junction(self):
+        app = self.root / "app"
+        base = self.factory(app)
+        other = self.factory(self.root / "other")
+        for name in ("factory/bin/route", "factory/bin/gate"):
+            self.write(other / name, (cleanup.SOURCE / name).read_text())
+        target = other / cleanup.SKILL_DIR
+        for name, content in cleanup.ENTRY_FILES.items():
+            self.write(target / name, content)
+        link = app / cleanup.SKILL_DIR
+        self.link_directory(link, target)
+        status, output = self.run_cleanup(app, "--apply")
+        self.assertEqual(status, 0, output)
+        self.assertTrue(cleanup.linked(link))
+        self.assertTrue((target / "SKILL.md").is_file())
+        self.assertFalse(base.exists())
+
     def test_legacy_cleanup_preserves_mixed_files_and_custom_agent(self):
         app = self.root / "app"
         known = cleanup.fingerprints()

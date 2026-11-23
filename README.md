@@ -4,7 +4,7 @@ A Windows-first port of the ZazenCodes Software Factory v2 for Claude Code. It u
 
 ## Install in one project
 
-Open a Codex chat in the Git project where you want the factory. Paste this prompt. The project must have at least one commit.
+Open the application's Git root as the project in Codex. If the checkout is `C:\Projects\My App`, select `My App` in the folder picker. The project must have at least one commit. Paste this prompt.
 
 ```text
 Install Software Factory for the Git project open in this chat.
@@ -15,16 +15,18 @@ it prints this project's path. Configure the local checks from the project's CI
 and run preflight.
 ```
 
-The installer writes only to `.factory/` inside the chosen project. That directory holds its skill, agent profiles, checks, job history and worktrees, and ignores itself in Git. You can also add `/.factory/` to the project's `.gitignore`. For a terminal install on a new machine, follow the [manual installation steps](INSTALL.md#install-from-github).
+The workflow, runtime, agent profiles, checks, jobs and worktrees live in `.factory/`. To make `$factory` visible in the application chat, the installer also creates a small `.agents/skills/factory/SKILL.md` file that points Codex to the workflow. Both directories include their own Git ignore rules.
+
+If an existing per-project installation is missing `$factory` from the picker, rerun the latest installer for that checkout. Your jobs and customized checks stay in place. [Manual install and repair](INSTALL.md#install-from-github)
 
 ## Start a job
 
-In a desktop chat opened at the application root, enter `Use .factory/.agents/skills/factory/SKILL.md for this project's factory`. In the CLI, launch from the application root with `codex -C .factory --add-dir (Get-Location).Path`, then enter `$factory`.
+Open a chat in that same application folder, or start `codex` there in a terminal. Enter `$factory status` to see the project's jobs. If the picker still shows the old skill list after installation, restart Codex and reopen the application folder. Enter `$factory` to choose a workflow.
 
 - **GitHub.** Label an open issue `factory`, then enter `$factory run 42` for issue 42 or `$factory run` for the queue. The factory hands you a reviewed PR to merge.
 - **Disconnected.** Describe the request in chat, then send `/factory execute` or `$factory execute` when the brief is ready. The factory hands you a reviewed local branch.
 
-Use `$factory status` to see progress or `$factory dashboard` to open this project's board. [Setup and validation](INSTALL.md) · [Runtime design](DESIGN.md) · [Example jobs](examples/jobs)
+Use `$factory dashboard` to open this project's board. [Setup and validation](INSTALL.md) · [Runtime design](DESIGN.md) · [Example jobs](examples/jobs)
 
 ## Clean up and reinstall
 

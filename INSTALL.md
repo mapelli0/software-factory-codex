@@ -12,15 +12,25 @@ python .\software-factory-codex\install.py "C:\Projects\My App"
 python "C:\Projects\My App\.factory\factory\bin\job" project
 ```
 
-The last command prints your application's Git root. If you already have a current factory source checkout, run `python install.py "<application checkout>"` from that folder.
+The last command prints your application's Git root. Use that exact folder when you open the project in Codex. For example, if the output is `C:\Projects\Suite\App`, select the `App` folder.
 
-The installer puts the runtime, skill, nine agent profiles, configuration and checks in `My App/.factory/`. Jobs, reports, locks, dashboard state and linked working trees are created there as the factory runs. Git records its normal branches and worktree registrations in the application repository. The internal `.factory/.gitignore` ignores the whole installation. If you keep repository-wide rules, add this line to the application's `.gitignore`.
+The installer puts the workflow, runtime, nine agent profiles, configuration and checks in `My App/.factory/`. Jobs, reports, locks, dashboard state and linked worktrees are created there as the factory runs. Git records the branches and worktree registrations in the application repository.
+
+Codex discovers the project skill through `My App/.agents/skills/factory/SKILL.md`. This ordinary file directs Codex to the workflow under `.factory/` and works on Windows without symbolic links. Each directory includes its own `.gitignore`, so both are ignored by default. If your team also keeps repository-wide rules, use these two paths in the application's `.gitignore`.
 
 ```gitignore
 /.factory/
+/.agents/skills/factory/
 ```
 
-Rerunning the installer fills missing packaged files and preserves installed files, including customized checks. For a fresh installation, preview cleanup first. A pre-existing, unrecognized `.factory` directory needs inspection before installation.
+To repair an **existing per-project installation** on this or another computer, rerun the latest installer. This adds the missing skill entry while preserving job history, worktrees and customized checks. From an existing clone of the factory source, run the following in PowerShell with the application's actual path.
+
+```powershell
+git pull --ff-only
+python install.py "C:\Projects\My App"
+```
+
+If you don't have a factory source clone on that machine, use the clone and install commands above. An unrecognized pre-existing `.factory` directory needs inspection before installation.
 
 ## Configure and verify
 
@@ -35,21 +45,21 @@ python .factory/factory/bin/gate --preflight
 
 ## Use from Codex
 
-**Desktop, from the application root.** In a fresh project chat, enter the following. It gives Codex the local skill explicitly and keeps the application checkout, job folders and worktrees in the project workspace.
+**Desktop.** Open a chat in the application's Git root, the folder printed by the install check. Type this command to verify skill discovery and see jobs for this project.
 
 ```text
-Use .factory/.agents/skills/factory/SKILL.md for this project's factory. Show my factory status.
+$factory status
 ```
 
-Continue in that chat with the factory workflow. To use the native `$factory` picker and project-local roles, start a chat with `.factory` as the working directory. Codex discovers skills from the working directory and its ancestors. An ordinary chat opened at the application root needs the explicit path above.
-
-**CLI.** From the application root, start Codex in the installation and include the application as a writable directory for Git operations.
+**CLI.** From PowerShell, open Codex directly in that same checkout, then enter `$factory status` in the chat.
 
 ```powershell
-codex -C .factory --add-dir (Get-Location).Path
+codex -C "C:\Projects\My App"
 ```
 
-Use `$factory status` for jobs, `$factory dashboard` for this project's local board, or `$factory` to choose GitHub or disconnected intake. Disconnected intake waits for `/factory execute` or `$factory execute`. GitHub and Git operations use the permissions of the current session.
+Codex looks for repository skills in the working folder and its ancestors. A chat opened in a parent folder cannot discover a child application's skill. If the entry exists at `.agents/skills/factory/SKILL.md` and the picker still shows the old list, restart Codex and reopen the application's Git root.
+
+Use `$factory dashboard` for this project's local board or `$factory` to choose GitHub or disconnected intake. Disconnected intake waits for `/factory execute` or `$factory execute`. GitHub and Git operations use the permissions of the current session.
 
 ## Remove old installations
 

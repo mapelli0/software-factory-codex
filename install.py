@@ -15,6 +15,7 @@ SOURCE = Path(__file__).resolve().parent
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(SOURCE / "factory" / "bin"))
 from runtime import exclusive_lock, validate_checkout
+from project_skill import ENTRY_FILES, SKILL_DIR
 
 
 MARKER = {"product": "software-factory-codex", "layout": "project-local-v1"}
@@ -39,8 +40,29 @@ def check_destination(path):
         raise ValueError(f"installation path contains a link: {path}")
 
 
+def validate_skill_entry(project):
+    directory = project
+    for part in SKILL_DIR.parts:
+        directory = directory / part
+        check_destination(directory)
+        if directory.exists() and not directory.is_dir():
+            raise ValueError(f"expected a skill directory at {directory}")
+
+    recognized = False
+    for name, expected in ENTRY_FILES.items():
+        path = directory / name
+        check_destination(path)
+        if path.exists():
+            if not path.is_file() or path.read_bytes().replace(b"\r\n", b"\n") != expected.encode("utf-8"):
+                raise ValueError(f"existing project skill entry at {path}; move or rename it to install $factory")
+            recognized = True
+    if not recognized and directory.exists() and any(directory.iterdir()):
+        raise ValueError(f"existing project skill at {directory}; move or rename it to install $factory")
+
+
 def install(checkout):
-    root = validate_checkout(checkout) / ".factory"
+    project = validate_checkout(checkout)
+    root = project / ".factory"
     files = {name: SOURCE / name for name in FILES}
     for name in ("checks.ps1", "config.json"):
         template = SOURCE / "factory" / "defaults" / name
@@ -50,6 +72,7 @@ def install(checkout):
         if not source.is_file():
             raise ValueError(f"factory distribution is missing {source}")
 
+    validate_skill_entry(project)
     check_destination(root)
     marker = root / "installation.json"
     try:
@@ -64,6 +87,7 @@ def install(checkout):
     lock = root / ".install.lock"
     check_destination(lock)
     with exclusive_lock(lock):
+        validate_skill_entry(project)
         for name in (".gitignore", *files):
             path = root
             for part in Path(name).parts:
@@ -72,8 +96,12 @@ def install(checkout):
             if path.exists() and not path.is_file():
                 raise ValueError(f"expected a regular file at {path}")
 
-        for name in (".gitignore", *files):
-            destination = root / name
+        destinations = {root / ".gitignore": b"*\n"}
+        destinations.update({root / name: source for name, source in files.items()})
+        # Publish the picker entry only after its full workflow is ready.
+        destinations.update({project / SKILL_DIR / name: content.encode("utf-8")
+                             for name, content in ENTRY_FILES.items()})
+        for destination, source in destinations.items():
             if destination.is_file():
                 continue  # Preserve installed checks, configuration and other local edits.
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -81,10 +109,10 @@ def install(checkout):
             os.close(fd)
             temp = Path(temp_name)
             try:
-                if name == ".gitignore":
-                    temp.write_bytes(b"*\n")
+                if isinstance(source, bytes):
+                    temp.write_bytes(source)
                 else:
-                    shutil.copy2(files[name], temp)
+                    shutil.copy2(source, temp)
                 temp.replace(destination)
             finally:
                 temp.unlink(missing_ok=True)
@@ -101,6 +129,7 @@ def main():
         parser.exit(1, f"install: {error}\n")
     print(f"Project factory: {root}")
     print("From the application root: python .factory/factory/bin/job project")
+    print("Open Codex in the application root and type $factory status.")
 
 
 if __name__ == "__main__":
