@@ -1,2 +1,39 @@
+# Factory agent roles; max_threads also supports the installed Codex CLI.
 [agents]
-max_concurrent_threads_per_session = 12
+max_threads = 4
+
+[agents."approver"]
+description = "Decide whether the factory PR is ready for human merge or needs an operator decision."
+config_file = "agents/approver.toml"
+
+[agents."builder"]
+description = "Factory step 3. Implements a job's spec on its factory/<job-id> branch, tests it against the acceptance criteria, commits, writes build.md and opens a draft PR in GitHub mode."
+config_file = "agents/builder.toml"
+
+[agents."intake-conversation"]
+description = "Scope disconnected factory work through conversation. Evaluate the saved local brief after the operator sends execute."
+config_file = "agents/intake-conversation.toml"
+
+[agents."intake"]
+description = "Factory step 1. Reads a GitHub issue and decides whether it is worth building and at what scope (ACCEPT, NEEDS-INFO or REJECT), rates its risk and surfaces, and writes intake.md."
+config_file = "agents/intake.toml"
+
+[agents."reviewer-code"]
+description = "Factory review lens. Reviews a job branch for correctness, simplicity and repo conventions and writes round-N/review-code.md."
+config_file = "agents/reviewer-code.toml"
+
+[agents."reviewer-security"]
+description = "Factory review lens. Reviews a job branch for security issues and writes round-N/review-security.md."
+config_file = "agents/reviewer-security.toml"
+
+[agents."reviewer-ui"]
+description = "Factory review lens. Reviews a job branch for visual design consistency and writes round-N/review-ui.md."
+config_file = "agents/reviewer-ui.toml"
+
+[agents."reviewer-ux"]
+description = "Factory review lens. Reviews a job branch for user experience (flows, states, copy, accessibility) and writes round-N/review-ux.md."
+config_file = "agents/reviewer-ux.toml"
+
+[agents."spec-writer"]
+description = "Factory step 2. Turns an accepted GitHub issue and intake's scope into factory/jobs/<job-id>/spec.md with testable acceptance criteria."
+config_file = "agents/spec-writer.toml"

@@ -30,8 +30,6 @@
     -webkit-font-smoothing: antialiased;
   }
   button { font: inherit; color: inherit; }
-  #project-filter { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; max-width: 100%; }
-  .project-name { margin: 0 0 6px; color: var(--active); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 
   /* Header */
   header {
@@ -257,7 +255,6 @@
 <body>
 <header>
   <h1>Software factory</h1>
-  <select id="project-filter" aria-label="Filter by project"><option value="">All projects</option></select>
   <div class="status" id="status">connecting…</div>
 </header>
 <div id="banner"></div>
@@ -304,14 +301,10 @@ const $ = (id) => document.getElementById(id)
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
-const jobKey = job => job.project_id + "/" + job.id
-const jobBase = job => "projects/" + job.project_id + "/jobs/" + job.id + "/"
 let jobs = []
 let lastRender = ''
 const roundCache = new Map() // "<job>/<n>" -> verdicts of a finished round
 let openJobId = null
-let drawerRequest = 0
-let filterSignature = ""
 let openPath = null
 let openText = null
 
@@ -335,9 +328,9 @@ function verdictOf(line) {
 
 // A round's verdicts come from its files: the gate first, then each routed reviewer.
 async function roundVerdicts(job, n) {
-  const key = `${jobKey(job)}/${n}`
+  const key = `${job.id}/${n}`
   if (roundCache.has(key)) return roundCache.get(key)
-  const dir = `${jobBase(job)}round-${n}/`
+  const dir = `jobs/${job.id}/round-${n}/`
   const v = { gate: verdictOf(await fetchFirst(dir + 'checks.md')), reviews: {} }
   if (v.gate === 'PASS') {
     await Promise.all(Object.keys(job.agents?.reviewers || {}).map(async (r) => {
@@ -358,7 +351,7 @@ function roundRow(job, n, v) {
   const current = n === job.round
   const cells = [chip('gate', v.gate, current && job.stage === 'gate', 'gate', 'gate')]
   if (v.gate === 'PASS') {
-    for (const r of Object.keys(job.agents?.reviewers || {})) {
+    for (const r of Object.keys(job.agents.reviewers)) {
       cells.push(chip(SHORT[r] || r, v.reviews[r], current && job.stage === 'review', r))
     }
   }
@@ -402,8 +395,7 @@ function card(job, rounds) {
   ].join('')
   return `
     <article class="card ${live ? 'live' : ''} ${human ? 'human' : ''} ${done ? 'done' : ''} ${job.stage}"
-             data-job="${esc(jobKey(job))}" tabindex="0">
-      <div class="project-name">${esc(job.project_name)}</div>
+             data-job="${esc(job.id)}" tabindex="0">
       <div class="card-top">
         ${live ? '<span class="pulse" aria-label="running"></span>' : ''}
         <span class="num">${esc(num)} · ${esc(slug.join('-'))}</span>
@@ -420,9 +412,7 @@ function card(job, rounds) {
 async function render() {
   const problems = []
   const cards = new Map(COLUMNS.map((c) => [c, []]))
-  const selected = $('project-filter').value
-  const visible = jobs.filter(job => !selected || job.project_id === selected)
-  for (const job of visible) {
+  for (const job of jobs) {
     if (!STAGES.has(job.stage)) { problems.push(`Job ${job.id} has unknown stage "${job.stage}"`); continue }
     const rounds = []
     for (let n = 1; n <= job.round; n++) rounds.push(roundRow(job, n, await roundVerdicts(job, n)))
@@ -443,44 +433,36 @@ async function render() {
     $('board').innerHTML = html
     $('banner').innerHTML = banner
   }
-  const running = visible.filter((j) => LIVE.has(j.stage)).length
+  const running = jobs.filter((j) => LIVE.has(j.stage)).length
   $('totals').textContent = `${running} running`
 }
 
 async function poll() {
   const status = $('status')
   try {
-    const data = JSON.parse(await fetchText("projects.json"))
-    jobs = data.jobs
-    updateProjectFilter(data.projects)
+    jobs = await loadJobs()
     await render()
-    const linked = location.hash.slice(1)
-    if (!openJobId && linked && jobs.some(job => jobKey(job) === linked)) await openDrawer(linked)
-    else if (openJobId) await refreshDrawer()
+    if (openJobId) await refreshDrawer()
     status.className = 'status'
-    status.innerHTML = `<span class="dot"></span>Live · ${new Date().toLocaleTimeString()}`
+    status.innerHTML = `<span class="dot"></span>jobs/ · ${new Date().toLocaleTimeString()}`
   } catch (err) {
     status.className = 'status error'
     status.innerHTML = `<span class="dot"></span>${esc(err.message)}`
   }
 }
 
-function updateProjectFilter(projects) {
-  const select = $('project-filter')
-  const current = select.value
-  const options = [new Option('All projects', '')]
-  for (const project of projects) {
-    const active = jobs.filter(j => j.project_id === project.id && LIVE.has(j.stage)).length
-    options.push(new Option(`${project.name} · ${active}/${project.concurrency} active`, project.id))
-  }
-  const signature = JSON.stringify(options.map(option => [option.value, option.text]))
-  if (signature === filterSignature) return
-  filterSignature = signature
-  select.replaceChildren(...options)
-  if (options.some(option => option.value === current)) select.value = current
+// factory/bin/job writes each jobs/<id>/job.json.
+async function loadJobs() {
+  let listing
+  try { listing = await fetchText('jobs/') } catch { return [] }
+  const doc = new DOMParser().parseFromString(listing, 'text/html')
+  const ids = [...doc.querySelectorAll('a')]
+    .map((a) => decodeURIComponent(a.getAttribute('href')))
+    .filter((h) => h.endsWith('/'))
+    .map((h) => h.slice(0, -1))
+    .sort()
+  return Promise.all(ids.map(async (id) => JSON.parse(await fetchText(`jobs/${id}/job.json`))))
 }
-
-$('project-filter').addEventListener('change', () => { closeDrawer(); render() })
 
 // ---- Drawer --------------------------------------------------------------
 
@@ -523,29 +505,25 @@ function tone(first) {
 const firstLines = new Map()
 
 async function refreshDrawer() {
-  const request = ++drawerRequest
-  const job = jobs.find((j) => jobKey(j) === openJobId)
+  const job = jobs.find((j) => j.id === openJobId)
   if (!job) return
-  $('d-num').textContent = `${job.project_name} · ${job.id} · ${job.stage}${job.round ? ` · round ${job.round}` : ''} · ${costText(job)} · ${elapsed(job)}`
+  $('d-num').textContent = `${job.id} · ${job.stage}${job.round ? ` · round ${job.round}` : ''} · ${costText(job)} · ${elapsed(job)}`
   $('d-title').textContent = job.title
   $('d-links').innerHTML = links(job)
 
-  const base = jobBase(job)
+  const base = `jobs/${job.id}/`
   const files = sortFiles(await listFiles(base))
-  if (request !== drawerRequest) return
   if (!openPath || !files.includes(openPath)) openPath = files[0] || null
 
   let text = null
   if (openPath) {
     text = await fetchText(base + openPath)
-    if (request !== drawerRequest) return
     firstLines.set(base + openPath, text.split('\n')[0].trim())
   }
   await Promise.all(files.filter((f) => !firstLines.has(base + f)).map(async (f) => {
     firstLines.set(base + f, (await fetchText(base + f)).split('\n')[0].trim())
   }))
 
-  if (request !== drawerRequest) return
   let group = null
   $('d-files').innerHTML = files.map((f) => {
     const g = f.includes('/') ? f.split('/')[0].replace('round-', 'Round ') : 'Job'
@@ -568,7 +546,6 @@ async function refreshDrawer() {
 
 async function openDrawer(id) {
   openJobId = id
-  history.replaceState(null, "", "#" + id)
   openPath = null
   openText = undefined
   document.body.classList.add('open')
@@ -580,8 +557,6 @@ async function openDrawer(id) {
 }
 
 function closeDrawer() {
-  drawerRequest++
-  history.replaceState(null, "", location.pathname + location.search)
   openJobId = null
   document.body.classList.remove('open')
 }
@@ -703,11 +678,8 @@ function markdown(src) {
   return html
 }
 
-async function refresh() {
-  await poll()
-  setTimeout(refresh, POLL_MS)
-}
-refresh()
+poll()
+setInterval(poll, POLL_MS)
 </script>
 </body>
 </html>

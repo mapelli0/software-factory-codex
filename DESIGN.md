@@ -1,18 +1,14 @@
 # Factory design
 
-The user-wide factory skill and its nine factory-prefixed agents run from application chats. The global launcher resolves a Git checkout to a stable project ID. Its registry, run lock, job artifacts and linked worktrees live under the local user data directory. Each project has independent run ownership and one active-job limit across intake modes. All runs share the loopback dashboard. Each accepted request gets a branch and worktree. GitHub jobs get one PR and disconnected jobs retain a local branch.
+The installer copies the skill and nine agent profiles into the application's `.factory` directory. The parent process supervises the queue and agents. The installed runtime resolves the application from its location. Job files live in `.factory/factory/jobs/` and each accepted job gets its own linked worktree in `.factory/.worktrees/`. Git registers those worktrees in the application repository. GitHub jobs get one PR and disconnected jobs retain a local branch. Older external installations use their existing checkout binding.
 
 | Component | Responsibility |
 | --- | --- |
-| `install.py` and `factory.py` | Install one copy and dispatch commands with an explicit application context. |
-| `factory/bin/projects.py` | Resolve the project registry, validation policy, job capacity settings and preview ports. |
-| `factory/bin/migration.py` | Preview, back up, import and retire verified legacy installations. |
 | `factory/bin/job` | Own job state, enforce legal stage transitions, coordinate worktrees and GitHub handoffs, and reconcile manual merges. |
 | `factory/bin/route` | Select code review and the UX, UI or security lenses based on intake risk and surfaces. A `default` model entry uses the client's defaults. |
 | `factory/bin/gate` | Run the configured checks from the worktree and record the result, commit and merge base. Verify protected paths. |
 | `factory/bin/runtime.py` | Select PowerShell and Windows file locking, or Bash and POSIX file locking. |
-| `factory/bin/dashboard.py` | Start or reuse a loopback server for the dashboard and job artifacts. |
-| `factory/dashboard.html` | Show live job state, review rounds, handoffs and job artifacts. |
+| `factory/dashboard.html` | Show job state, review rounds, handoffs and job artifacts. |
 
 ## Workflow
 

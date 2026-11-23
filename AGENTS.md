@@ -1,7 +1,7 @@
 # Software factory
 
-Use INSTALL.md for installation and updates. Install the runtime and factory-prefixed roles once per user. Start a fresh Codex chat in the application and invoke `$factory`. Resolve the global launcher beside the installed skill. Use its `status` command to verify the selected application, runtime and local jobs directory.
+For a new installation run `python install.py "<application checkout>"` from the factory source. Follow INSTALL.md for project checks and Codex startup. Resolve the application from the installed directory with `python factory/bin/job project`. Respect its AGENTS.md and the optional PROJECT.local.md inside the installation.
 
-Respect the application's AGENTS.md and portable settings in `.factory/project.json`. The project-specific job directory and linked worktrees live in user data. The operator merges every GitHub PR or disconnected branch. Disconnected intake waits for `/factory execute` or `$factory execute`.
+The Python entry points are `factory/bin/job`, `factory/bin/gate` and `factory/bin/route`. Job files and linked worktrees live in `factory/jobs/` and `.worktrees/` under the installation. The operator merges through GitHub or locally.
 
-Route `$factory cleanup` to the current project's migration preview. Apply the reviewed migration after operator approval. Run the native integration suite with `python -m unittest discover -s tests -v` when changing installation, job ownership, migration or dashboard behavior.
+Disconnected intake collects a brief in chat. Start the job only after `/factory execute` or `$factory execute`. Verify changes to installation or cleanup with `python -m unittest discover -s tests -v` from the source checkout.

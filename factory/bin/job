@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manage job records and stage transitions for the selected project.
+"""The only writer of factory/jobs/<job-id>/job.json.
 
 Every stage change goes through `advance`, which checks the files that justify
 it and refuses anything else. GitHub side effects that belong to a transition
@@ -7,6 +7,7 @@ it and refuses anything else. GitHub side effects that belong to a transition
 orchestrator never improvises them.
 
 Usage:
+  job configure <checkout>       bind a legacy separate factory to its application
   job project                    print the selected application checkout
   job queue                      what $factory run should do with each labeled issue
   job create <issue>             new job for an open labeled GitHub issue
@@ -19,8 +20,7 @@ Usage:
   job --run <token> release      release the orchestrator slot
   job feedback <job>             needs-human → build, with your feedback (stdin) as feedback-<k>.md
   job reject <job>               needs-info or needs-human → rejected, with your reason (stdin) as rejection.md
-  job route <job>                record the configured reviewers for accepted intake
-  job agents <job> <json>        explicitly assign a reviewer set to accepted intake
+  job agents <job> <json>        record the routed agent set (called by factory/bin/route)
   job sync <job>                 refresh reviews and gate from the job's files
   job summary [<job>...]         table of jobs: issue, stage, PR, cost, time
 
@@ -29,22 +29,20 @@ Usage:
 
 import json
 import re
-import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from projects import context, reserve_ports, release_ports, validate_job, validation_policy
-from runtime import exclusive_lock, replace_file
+from runtime import PROJECT_FILE, check_job_checkout, exclusive_lock, project_checkout, validate_project
 
 FACTORY = Path(__file__).resolve().parents[1]
-PROJECT, PROJECT_ID, STATE, CONFIG = context()
-WORKTREES = STATE / "worktrees"
-JOBS = STATE / "jobs"
+WORKTREES = FACTORY.parent / ".worktrees"
+JOBS = FACTORY / "jobs"
 OWNER = JOBS / ".owner"
 BIN = FACTORY / "bin"
+CONFIG = json.loads((FACTORY / "config.json").read_text(encoding="utf-8"))
 LABELS = CONFIG["labels"]
 BASE = CONFIG["base_branch"]
 MARKER = "<!-- factory -->"
@@ -81,7 +79,7 @@ def now():
 
 
 def run(cmd, cwd=None, check=True):
-    checkout = PROJECT if cwd is None else cwd
+    checkout = project_checkout(FACTORY) if cwd is None else cwd
     res = subprocess.run(cmd, cwd=checkout, capture_output=True, encoding="utf-8", errors="replace")
     if check and res.returncode != 0:
         raise Refused(f"`{' '.join(cmd)}` failed: {(res.stderr or res.stdout).strip()}")
@@ -89,7 +87,7 @@ def run(cmd, cwd=None, check=True):
 
 
 def gh(*args):
-    return run([shutil.which("gh") or "gh", *args]).stdout
+    return run(["gh", *args]).stdout
 
 
 def gh_json(*args):
@@ -121,17 +119,36 @@ def load(job_id):
     if not path.exists():
         die(f"no job {job_id}")
     job = json.loads(path.read_text(encoding="utf-8"))
-    validate_job(PROJECT_ID, STATE, job)
+    check_job_checkout(FACTORY, project_checkout(FACTORY), job)
     return job
+
+
+def configure(checkout):
+    home = FACTORY.parent
+    if home.name == ".factory" and (home / "installation.json").is_file():
+        project = project_checkout(FACTORY)
+        require(Path(checkout).expanduser().resolve() == project,
+                "a project-local factory always uses its enclosing application")
+        print(project)
+        return
+    project = validate_project(FACTORY, checkout)
+    binding = FACTORY.parent / PROJECT_FILE
+    if binding.exists() and project_checkout(FACTORY) == project:
+        print(project)
+        return
+    require(not any(JOBS.glob("*/job.json")) and not any(WORKTREES.glob("*")),
+            "this factory already has jobs or worktrees; use a new factory directory")
+    temporary = binding.with_suffix(".tmp")
+    temporary.write_text(json.dumps({"checkout": str(project)}, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(binding)
+    print(project)
 
 
 def save(job):
     path = job_dir(job["id"]) / "job.json"
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
-    replace_file(tmp, path)
-    if job["stage"] in TERMINAL:
-        release_ports(PROJECT_ID, job["id"])
+    tmp.replace(path)
 
 
 def all_jobs():
@@ -150,11 +167,11 @@ def disconnected(job):
 
 
 def base_ref(job):
-    return job["base_commit"] if disconnected(job) else "origin/" + job["base_branch"]
+    return job["base_commit"] if disconnected(job) else f"origin/{BASE}"
 
 
-def require_slot(job_id):
-    busy = [j["id"] for j in running(all_jobs()) if j["id"] != job_id]
+def require_slot(job_id, *, local=False):
+    busy = [j["id"] for j in running(all_jobs()) if j["id"] != job_id and disconnected(j) == local]
     require(len(busy) < CONCURRENCY,
             f"concurrency {CONCURRENCY} reached; running: {', '.join(busy)}")
 
@@ -195,29 +212,6 @@ def round_dir(job, n=None):
 
 def reviewers(job):
     return list(job["agents"]["reviewers"])
-
-
-def assign_agents(job, agents):
-    require(job["stage"] == "intake" and (job["intake"] or {}).get("decision") == "ACCEPT",
-            "route only an intake job that intake ACCEPTed")
-    selected = agents.get("reviewers") if isinstance(agents, dict) else None
-    require(isinstance(selected, dict) and "code" in selected and
-            selected.keys() <= {"code", "security", "ui", "ux"} and
-            all(isinstance(value, str) and value for value in selected.values()),
-            "invalid reviewer routing")
-    job["agents"] = agents
-
-
-def route_intake(job):
-    intake = job["intake"] or {}
-    require(intake.get("decision") == "ACCEPT", "routing requires DECISION: ACCEPT in intake.md")
-    risk = intake["risk"]
-    require(risk in CONFIG["routing"], f"unknown intake risk: {risk!r}")
-    selected = dict(CONFIG["routing"][risk])
-    for surface in intake["surfaces"]:
-        require(surface in CONFIG["surface_reviewers"], f"unknown intake surface: {surface!r}")
-        selected.update(CONFIG["surface_reviewers"][surface])
-    assign_agents(job, {"reviewers": selected})
 
 
 # ---- Issue → issue.md ------------------------------------------------------
@@ -363,7 +357,6 @@ def next_round(job):
 
 
 def advance(job, stage, *, handoff=None):
-    BASE = job.get("base_branch", CONFIG["base_branch"])
     old = job["stage"]
     require(stage in TRANSITIONS.get(old, set()) or (stage == "merged" and old not in TERMINAL),
             f"{job['id']}: {old} → {stage} is not a legal transition")
@@ -402,8 +395,7 @@ def advance(job, stage, *, handoff=None):
                     "issue is closed or no longer labeled for the factory")
         title = f"### Factory intake: {decision}"
         if stage == "spec":
-            if not job["agents"]:
-                route_intake(job)
+            require(job["agents"], "route the job first: factory/bin/route " + job["id"])
             i = job["intake"]
             title += f" (risk {i['risk']}, surfaces: {', '.join(i['surfaces']) or 'none'})"
         if not disconnected(job):
@@ -425,7 +417,7 @@ def advance(job, stage, *, handoff=None):
                 run(["git", "worktree", "add", "-b", job["branch"], job["worktree"], base_ref(job)])
 
     elif old == "needs-info":
-        require_slot(job["id"])
+        require_slot(job["id"], local=disconnected(job))
         k = len(list(d.glob("intake-*.md"))) + 1
         if not disconnected(job):
             write_issue_md(job)
@@ -509,7 +501,7 @@ def advance(job, stage, *, handoff=None):
                 "use job ready for APPROVE or advance needs-human for ESCALATE")
 
     elif old == "needs-human":
-        require_slot(job["id"])
+        require_slot(job["id"], local=disconnected(job))
         feedback = sorted(d.glob("feedback-*.md"), key=lambda path: int(path.stem.rsplit("-", 1)[1]))
         require(feedback and feedback[-1].stat().st_mtime > (d / "decision.md").stat().st_mtime,
                 "use `job feedback` to send a job back to the builder")
@@ -583,21 +575,18 @@ def cmd_create(number):
 
 def new_job(title, issue=None, issue_url=None):
     JOBS.mkdir(parents=True, exist_ok=True)
-    numbers = [int(p.name.split("-")[0]) for p in JOBS.iterdir() if p.name[:3].isdigit()]
+    # A reinstall starts a fresh jobs directory but may inherit unmerged job branches.
+    refs = run(["git", "for-each-ref", "--format=%(refname)", "refs/heads/factory",
+                "refs/remotes/origin/factory"]).stdout.splitlines()
+    ids = [entry.name for entry in JOBS.iterdir()] + [ref.rsplit("/", 1)[-1] for ref in refs]
+    numbers = [int(name.split("-", 1)[0]) for name in ids if re.fullmatch(r"\d{3,}-[a-z0-9-]+", name)]
     job_id = f"{max(numbers, default=0) + 1:03d}-{slugify(title)}"
-    ref = "HEAD" if issue is None else f"origin/{BASE}"
-    if issue is not None:
-        run(["git", "fetch", "origin", BASE])
-    revision = run(["git", "rev-parse", "--verify", ref]).stdout.strip()
-    policy = validation_policy(PROJECT, STATE, revision)
     job_dir(job_id).mkdir()
     return {
         "id": job_id, "issue": issue, "title": title, "issue_url": issue_url,
         "pr": None, "pr_url": None, "mode": "github" if issue is not None else "disconnected",
         "branch": f"factory/{job_id}", "worktree": str(WORKTREES / job_id),
-        "project_checkout": str(PROJECT), "project_id": PROJECT_ID,
-        "preview_port": reserve_ports(PROJECT_ID, job_id), "validation": policy,
-        "base_branch": BASE,
+        "project_checkout": str(project_checkout(FACTORY)),
         "stage": "intake", "round": 0, "round_limit": CONFIG["max_rounds"],
         "intake": None, "agents": None, "gate": None, "reviews": {},
         "cost_usd": None, "started": now(), "ended": None,
@@ -606,9 +595,10 @@ def new_job(title, issue=None, issue_url=None):
 
 def cmd_create_local(title, brief):
     require(title.strip() and brief.strip(), "supply a title and the conversation brief")
-    require_slot(None)
+    require_slot(None, local=True)
+    base = run(["git", "rev-parse", "--verify", "HEAD"]).stdout.strip()
     job = new_job(title.strip())
-    job["base_commit"] = job["validation"]["revision"]
+    job["base_commit"] = base
     issue = job_dir(job["id"]) / "issue.md"
     issue.write_text(f"# {title.strip()}\n\n## Conversation brief\n\n{quote(brief)}\n", encoding="utf-8")
     save(job)
@@ -618,7 +608,7 @@ def cmd_create_local(title, brief):
 def cmd_clarify_local(job, text):
     require(disconnected(job) and job["stage"] == "needs-info", "job is not awaiting disconnected clarification")
     require(text.strip(), "no clarification on stdin")
-    require_slot(job["id"])
+    require_slot(job["id"], local=True)
     issue = job_dir(job["id"]) / "issue.md"
     with issue.open("a", encoding="utf-8") as file:
         file.write(f"\n## Operator clarification\n\n{quote(text)}\n")
@@ -652,7 +642,7 @@ def cmd_queue():
             note = j.get("handoff_reason") or "review the decision or give feedback"
             other_rows.append(("wait", n, j["id"], j["stage"], " ".join(note.split())))
         elif j["stage"] == "rejected":
-            other_rows.append(("skip", n, j["id"], j["stage"], "rejected"))
+            other_rows.append(("skip", n, j["id"], j["stage"], f"rejected; delete factory/jobs/{j['id']} to retry"))
         elif j["stage"] == "merged":
             other_rows.append(("skip", n, j["id"], j["stage"], "merged"))
         else:
@@ -661,7 +651,7 @@ def cmd_queue():
         if n not in open_numbers and j["stage"] not in TERMINAL | WAITING:
             other_rows.append(("skip", n, j["id"], j["stage"], f"issue is closed or no longer labeled {LABELS['queue']}"))
     # Jobs already in a running stage hold a slot whether or not an agent is on them.
-    slots = CONCURRENCY - len(running(all_jobs()))
+    slots = CONCURRENCY - len(running(jobs.values()))
     rows = list(running_rows)
     for row in replied_rows + new_rows:
         if slots > 0:
@@ -674,7 +664,6 @@ def cmd_queue():
 
 
 def cmd_ready(job):
-    BASE = job.get("base_branch", CONFIG["base_branch"])
     require(job["stage"] in {"approve", "merging"}, "job is not in the final approval stage")
     if not disconnected(job) and job["pr"] and pr_state(job) == "MERGED":
         save(advance(job, "merged"))
@@ -756,7 +745,7 @@ def cmd_feedback(job, text):
         die(f"{job['id']} is in {job['stage']}, not needs-human")
     if not text.strip():
         die("no feedback on stdin")
-    require_slot(job["id"])
+    require_slot(job["id"], local=disconnected(job))
     d = job_dir(job["id"])
     k = len(list(d.glob("feedback-*.md"))) + 1
     author = "the operator" if disconnected(job) else f"@{operator()}"
@@ -774,6 +763,19 @@ def cmd_reject(job, text):
     (job_dir(job["id"]) / "rejection.md").write_text(f"REJECTED\n\nBy {author} while the job was {job['stage']}.\n\n{text.strip()}\n", encoding="utf-8")
     save(advance(sync(job), "rejected"))
     print(f"{job['id']}: rejected")
+
+
+def cmd_agents(job, spec):
+    if job["stage"] != "intake" or (job["intake"] or {}).get("decision") != "ACCEPT":
+        die(f"{job['id']}: route only an intake job that intake ACCEPTed")
+    agents = json.loads(spec)
+    selected = agents.get("reviewers")
+    require(isinstance(selected, dict) and "code" in selected and
+            selected.keys() <= {"code", "security", "ui", "ux"} and
+            all(isinstance(value, str) and value for value in selected.values()),
+            "invalid reviewer routing")
+    job["agents"] = agents
+    save(job)
 
 
 def elapsed(job):
@@ -799,7 +801,9 @@ def cmd_summary(args):
 def dispatch(argv):
     cmd, args = argv[0], argv[1:]
     try:
-        if cmd == "queue" and not args:
+        if cmd == "configure" and len(args) == 1:
+            configure(args[0])
+        elif cmd == "queue" and not args:
             cmd_queue()
         elif cmd == "create" and len(args) == 1 and args[0].isdigit():
             cmd_create(args[0])
@@ -822,15 +826,8 @@ def dispatch(argv):
             cmd_feedback(resolve(args[0]), sys.stdin.read())
         elif cmd == "reject" and len(args) == 1:
             cmd_reject(resolve(args[0]), sys.stdin.read())
-        elif cmd == "route" and len(args) == 1:
-            job = sync(resolve(args[0]))
-            route_intake(job)
-            save(job)
-            print(f"{job['id']}: reviewers " + ", ".join(f"{k} {v}" for k, v in job["agents"]["reviewers"].items()))
         elif cmd == "agents" and len(args) == 2:
-            job = sync(resolve(args[0]))
-            assign_agents(job, json.loads(args[1]))
-            save(job)
+            cmd_agents(sync(resolve(args[0])), args[1])
         elif cmd == "sync" and len(args) == 1:
             job = sync(resolve(args[0]))
             save(job)
@@ -852,15 +849,12 @@ def main(argv):
     if len(argv) >= 3 and argv[0] == "--run":
         token, argv = argv[1], argv[2:]
     if argv == ["project"]:
-        print(PROJECT)
+        print(project_checkout(FACTORY))
         return
     if argv[0] == "summary":
         cmd_summary(argv[1:])
         return
     with exclusive_lock(JOBS / ".lock"):
-        from migration import ensure_ready
-        if argv != ["release"]:
-            ensure_ready(PROJECT, STATE)
         owner = OWNER.read_text(encoding="utf-8").strip() if OWNER.exists() else None
         if argv[0] == "claim" and set(argv[1:]) <= {"--recover", "--dashboard"}:
             if owner and "--recover" not in argv:

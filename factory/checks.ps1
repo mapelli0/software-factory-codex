@@ -7,4 +7,4 @@
 # dotnet test -c Release --no-restore
 # if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $ErrorActionPreference = 'Stop'
-Write-Error 'Configure factory/checks.ps1 with this repository''s validation commands.'
+Write-Error 'Configure .factory/factory/checks.ps1 with this repository''s validation commands.'

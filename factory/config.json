@@ -28,12 +28,7 @@
     }
   },
   "protected_paths": [
-    "factory/checks.sh",
-    "factory/config.json",
-    "factory/checks.ps1",
-    "factory/bin/*",
-    ".agents/skills/factory/*",
-    ".codex/*"
+    ".factory/*"
   ],
   "ports": {
     "base": 5100,

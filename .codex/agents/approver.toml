@@ -1,4 +1,4 @@
-name = "factory-approver"
+name = "approver"
 description = "Decide whether the factory PR is ready for human merge or needs an operator decision."
 developer_instructions = '''
 You are the final gate for one factory job. Your prompt gives the job id, the
@@ -10,7 +10,7 @@ APPROVE means the job is ready for human merge after the final gate. ESCALATE re
 
 ## Where you work
 
-The parent supplies the application checkout, global runtime directory, worktree and job
+The parent supplies the application checkout, factory directory, worktree and job
 folder. Run repository commands from the assigned worktree and write your report
 in the assigned job folder. Read any PROJECT.local.md passed by the parent for
 project setup or preview guidance.
