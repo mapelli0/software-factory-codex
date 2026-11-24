@@ -23,7 +23,7 @@ Codex discovers the project skill through `My App/.agents/skills/factory/SKILL.m
 /.agents/skills/factory/
 ```
 
-To update or repair an **existing per-project installation**, finish active runs and rerun the latest installer. The installer adds model settings to the existing configuration and upgrades the original workflow while preserving jobs, worktrees and local edits. From an existing clone of the factory source, run the following in PowerShell with the application's actual path.
+To update or repair an **existing per-project installation**, finish active runs and rerun the latest installer. The installer adds model and reasoning settings to the existing configuration and upgrades the original workflow while preserving jobs, worktrees and local edits. From an existing clone of the factory source, run the following in PowerShell with the application's actual path.
 
 ```powershell
 git pull --ff-only
@@ -43,17 +43,20 @@ python .factory/factory/bin/job project
 python .factory/factory/bin/gate --preflight
 ```
 
-## Choose models for factory agents
+## Choose models and reasoning for factory agents
 
 Use `$factory models` to see the project's choices. The defaults are:
 
-| Work | Model ID |
-| --- | --- |
-| Intake, spec, build, approval, security review | `gpt-6.2-astra` |
-| Medium- and high-risk code review, UX review | `gpt-6.2-sol` |
-| Low-risk code review, UI review | `gpt-6-luna` |
+| Work | Model ID | Reasoning |
+| --- | --- | --- |
+| Intake (GitHub or disconnected), spec | `gpt-6.2-astra` | High |
+| Build, approval, security review | `gpt-6.2-astra` | Medium |
+| Medium- and high-risk code review, UX review | `gpt-6.2-sol` | Client default |
+| Low-risk code review, UI review | `gpt-6-luna` | Client default |
 
 Edit `.factory/factory/config.json` in the application. Set `agent_models` for `intake`, `intake-conversation`, `spec-writer`, `builder` and `approver`. For example, set `"builder": "gpt-6.2-sol"` to use Sol for builds. Set code reviewer models by risk in `routing`, and UX, UI and security reviewer models in `surface_reviewers`. Use a model supported by your client or set a value to `default` to use its normal subagent model selection. Existing jobs keep the reviewer models saved when they were routed. The installer upgrades the old stock reviewer tables and preserves customized tables. [Codex model availability](https://learn.chatgpt.com/docs/models?surface=app)
+
+Set `reasoning_effort` by role name, for example `"reviewer-security": "high"`. Omit the role or use `default` to let Codex choose the effort. Changes apply the next time the role starts, including when resuming an existing job. If Codex cannot apply the selected effort, the workflow reports the role and pauses that stage. [Codex subagent reasoning](https://learn.chatgpt.com/docs/agent-configuration/subagents#choosing-models-and-reasoning)
 
 ## Use from Codex
 

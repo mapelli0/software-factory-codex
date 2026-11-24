@@ -21,8 +21,14 @@ from project_skill import ENTRY_FILES, SKILL_DIR
 
 MARKER = {"product": "software-factory-codex", "layout": "project-local-v1"}
 WORKFLOW = ".agents/skills/factory/SKILL.md"
-# The unmodified workflow shipped by the first project-local installer.
-PRE_MODEL_WORKFLOW = "5916fec498b248abe2d8404a7af0e0432db756682110f9e106e669c5057052a1"
+# Hashes of the shipped files before model and reasoning settings were added.
+UPGRADE_HASHES = {
+    WORKFLOW: {
+        "5916fec498b248abe2d8404a7af0e0432db756682110f9e106e669c5057052a1",
+        "ad42480f632cd68d89a8ff690e93f0386f57655f23e2b2a08770fb3610b99b67",
+    },
+    "factory/bin/models": {"85151792725e36779a4835e3ccb4c40e97acc2da8d9c47c5b43bdf28427a07c8"},
+}
 PRE_MODEL_REVIEWERS = {
     "routing": {risk: {"code": "default"} for risk in ("low", "medium", "high")},
     "surface_reviewers": {"ui": {"ux": "default", "ui": "default"}, "security": {"security": "default"}},
@@ -69,26 +75,30 @@ def validate_skill_entry(project):
 
 
 def upgrade_contents(name, installed, bundled):
-    """Update the old stock workflow and add model settings without replacing project settings."""
-    if name == WORKFLOW:
+    """Update stock files and add missing settings while preserving local choices."""
+    if name in UPGRADE_HASHES:
         contents = installed.read_bytes().replace(b"\r\n", b"\n")
-        if hashlib.sha256(contents).hexdigest() == PRE_MODEL_WORKFLOW:
+        if hashlib.sha256(contents).hexdigest() in UPGRADE_HASHES[name]:
             return bundled
         if contents != bundled.read_bytes().replace(b"\r\n", b"\n"):
-            print(f"Kept customized workflow at {installed}. See the source workflow for model dispatch changes.")
+            print(f"Kept customized file at {installed}. See {bundled} for the current model and reasoning settings.")
     if name != "factory/config.json":
         return None
     try:
         config = json.loads(installed.read_text(encoding="utf-8"))
     except ValueError:
         return None
-    if not isinstance(config, dict) or "agent_models" in config or not PRE_MODEL_REVIEWERS.keys() <= config.keys():
+    if not isinstance(config, dict) or not PRE_MODEL_REVIEWERS.keys() <= config.keys():
+        return None
+    if {"agent_models", "reasoning_effort"} <= config.keys():
         return None
     defaults = json.loads(bundled.read_text(encoding="utf-8"))
-    config["agent_models"] = defaults["agent_models"]
-    for key, old_defaults in PRE_MODEL_REVIEWERS.items():
-        if config[key] == old_defaults:
-            config[key] = defaults[key]
+    if "agent_models" not in config:
+        config["agent_models"] = defaults["agent_models"]
+        for key, old_defaults in PRE_MODEL_REVIEWERS.items():
+            if config[key] == old_defaults:
+                config[key] = defaults[key]
+    config.setdefault("reasoning_effort", defaults["reasoning_effort"])
     return (json.dumps(config, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 

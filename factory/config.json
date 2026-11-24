@@ -14,6 +14,14 @@
     "builder": "gpt-6.2-astra",
     "approver": "gpt-6.2-astra"
   },
+  "reasoning_effort": {
+    "intake": "high",
+    "intake-conversation": "high",
+    "spec-writer": "high",
+    "builder": "medium",
+    "approver": "medium",
+    "reviewer-security": "medium"
+  },
   "routing": {
     "low": {
       "code": "gpt-6-luna"

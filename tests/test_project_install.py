@@ -98,6 +98,7 @@ class ProjectInstallTest(unittest.TestCase):
         config = self.root / "factory/config.json"
         settings = json.loads(config.read_bytes())
         del settings["agent_models"]
+        del settings["reasoning_effort"]
         settings["routing"] = {risk: {"code": "default"} for risk in ("low", "medium", "high")}
         settings["surface_reviewers"]["ui"]["ux"] = "custom-model"
         settings["concurrency"] = 2
@@ -109,10 +110,38 @@ class ProjectInstallTest(unittest.TestCase):
         self.assertEqual(models["routing"]["low"]["code"], "gpt-6-luna")
         self.assertEqual(models["routing"]["high"]["code"], "gpt-6.2-sol")
         self.assertEqual(models["surface_reviewers"], settings["surface_reviewers"])
+        self.assertEqual(models["reasoning_effort"], {
+            "intake": "high",
+            "intake-conversation": "high",
+            "spec-writer": "high",
+            "builder": "medium",
+            "approver": "medium",
+            "reviewer-security": "medium",
+        })
         self.assertEqual(json.loads(config.read_bytes())["concurrency"], 2)
         upgraded = config.read_bytes()
         self.install()
         self.assertEqual(config.read_bytes(), upgraded)
+
+    def test_upgrade_adds_reasoning_to_a_project_with_model_overrides(self):
+        self.commit_application()
+        self.install()
+        config = self.root / "factory/config.json"
+        settings = json.loads(config.read_bytes())
+        del settings["reasoning_effort"]
+        settings["agent_models"]["builder"] = "gpt-6.2-sol"
+        config.write_text(json.dumps(settings), encoding="utf-8")
+        self.install()
+        models = json.loads(self.command(sys.executable, self.bin / "models"))
+        self.assertEqual(models["agent_models"]["builder"], "gpt-6.2-sol")
+        self.assertEqual(models["reasoning_effort"]["builder"], "medium")
+
+        settings = json.loads(config.read_bytes())
+        settings["reasoning_effort"]["builder"] = "high"
+        config.write_text(json.dumps(settings), encoding="utf-8")
+        self.install()
+        models = json.loads(self.command(sys.executable, self.bin / "models"))
+        self.assertEqual(models["reasoning_effort"]["builder"], "high")
 
     def test_upgrade_registers_skill_and_repairs_missing_entry_files(self):
         self.commit_application()

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Print this installation's configured stage and reviewer models."""
+"""Print this installation's configured models and reasoning levels."""
 
 import json
 import sys
 from pathlib import Path
+
+
+REASONING_LEVELS = {"default", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
 
 
 def main():
@@ -12,9 +15,17 @@ def main():
     path = Path(__file__).resolve().parents[1] / "config.json"
     try:
         config = json.loads(path.read_text(encoding="utf-8"))
-        models = {key: config.get(key, {}) for key in ("agent_models", "routing", "surface_reviewers")}
+        if not isinstance(config, dict):
+            raise ValueError("config.json must contain a JSON object")
+        models = {key: config.get(key, {}) for key in ("agent_models", "routing", "surface_reviewers", "reasoning_effort")}
+        efforts = models["reasoning_effort"]
+        if not isinstance(efforts, dict):
+            raise ValueError("reasoning_effort must map agent roles to reasoning levels")
+        for role, level in efforts.items():
+            if not isinstance(level, str) or level not in REASONING_LEVELS:
+                raise ValueError(f"reasoning_effort.{role} is not a recognized reasoning level: {level!r}")
         print(json.dumps(models, indent=2))
-    except (OSError, ValueError, AttributeError) as error:
+    except (OSError, ValueError) as error:
         sys.exit(f"models: {error}")
 
 
