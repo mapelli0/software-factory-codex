@@ -66,6 +66,7 @@ class ProjectInstallTest(unittest.TestCase):
         self.command(sys.executable, self.bin / "route", "--run", token, job_id)
         self.command(*claimed, "advance", job_id, "spec")
         state = json.loads((folder / "job.json").read_text())
+        self.assertEqual(state["agents"]["reviewers"], {"code": "gpt-6-luna"})
         worktree = self.root / ".worktrees" / job_id
         self.assertEqual(Path(state["worktree"]), worktree)
         self.assertEqual(Path(state["project_checkout"]), self.project)
@@ -90,6 +91,28 @@ class ProjectInstallTest(unittest.TestCase):
         self.install()
         self.assertEqual(config.read_text(), '{"local": true}')
         self.assertTrue((self.bin / "gate").is_file())
+
+    def test_upgrade_adds_model_defaults_and_preserves_custom_routing(self):
+        self.commit_application()
+        self.install()
+        config = self.root / "factory/config.json"
+        settings = json.loads(config.read_bytes())
+        del settings["agent_models"]
+        settings["routing"] = {risk: {"code": "default"} for risk in ("low", "medium", "high")}
+        settings["surface_reviewers"]["ui"]["ux"] = "custom-model"
+        settings["concurrency"] = 2
+        config.write_text(json.dumps(settings), encoding="utf-8")
+        (self.bin / "models").unlink()
+        self.install()
+        models = json.loads(self.command(sys.executable, self.bin / "models"))
+        self.assertEqual(models["agent_models"]["builder"], "gpt-6.2-astra")
+        self.assertEqual(models["routing"]["low"]["code"], "gpt-6-luna")
+        self.assertEqual(models["routing"]["high"]["code"], "gpt-6.2-sol")
+        self.assertEqual(models["surface_reviewers"], settings["surface_reviewers"])
+        self.assertEqual(json.loads(config.read_bytes())["concurrency"], 2)
+        upgraded = config.read_bytes()
+        self.install()
+        self.assertEqual(config.read_bytes(), upgraded)
 
     def test_upgrade_registers_skill_and_repairs_missing_entry_files(self):
         self.commit_application()

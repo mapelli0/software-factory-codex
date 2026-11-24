@@ -2,6 +2,7 @@
 """Install Software Factory in an application's .factory directory."""
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -19,13 +20,20 @@ from project_skill import ENTRY_FILES, SKILL_DIR
 
 
 MARKER = {"product": "software-factory-codex", "layout": "project-local-v1"}
+WORKFLOW = ".agents/skills/factory/SKILL.md"
+# The unmodified workflow shipped by the first project-local installer.
+PRE_MODEL_WORKFLOW = "5916fec498b248abe2d8404a7af0e0432db756682110f9e106e669c5057052a1"
+PRE_MODEL_REVIEWERS = {
+    "routing": {risk: {"code": "default"} for risk in ("low", "medium", "high")},
+    "surface_reviewers": {"ui": {"ux": "default", "ui": "default"}, "security": {"security": "default"}},
+}
 ROLES = ("approver", "builder", "intake", "intake-conversation", "spec-writer",
          "reviewer-code", "reviewer-security", "reviewer-ui", "reviewer-ux")
 FILES = (
-    "AGENTS.md", "INSTALL.md", "LICENSE", ".agents/skills/factory/SKILL.md",
+    "AGENTS.md", "INSTALL.md", "LICENSE", WORKFLOW,
     ".codex/config.toml", *(f".codex/agents/{role}.toml" for role in ROLES),
     "factory/checks.ps1", "factory/checks.sh", "factory/config.json", "factory/dashboard.html",
-    "factory/bin/job", "factory/bin/gate", "factory/bin/route",
+    "factory/bin/job", "factory/bin/gate", "factory/bin/route", "factory/bin/models",
     "factory/bin/runtime.py", "factory/bin/dashboard.py",
 )
 
@@ -58,6 +66,30 @@ def validate_skill_entry(project):
             recognized = True
     if not recognized and directory.exists() and any(directory.iterdir()):
         raise ValueError(f"existing project skill at {directory}; move or rename it to install $factory")
+
+
+def upgrade_contents(name, installed, bundled):
+    """Update the old stock workflow and add model settings without replacing project settings."""
+    if name == WORKFLOW:
+        contents = installed.read_bytes().replace(b"\r\n", b"\n")
+        if hashlib.sha256(contents).hexdigest() == PRE_MODEL_WORKFLOW:
+            return bundled
+        if contents != bundled.read_bytes().replace(b"\r\n", b"\n"):
+            print(f"Kept customized workflow at {installed}. See the source workflow for model dispatch changes.")
+    if name != "factory/config.json":
+        return None
+    try:
+        config = json.loads(installed.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    if not isinstance(config, dict) or "agent_models" in config or not PRE_MODEL_REVIEWERS.keys() <= config.keys():
+        return None
+    defaults = json.loads(bundled.read_text(encoding="utf-8"))
+    config["agent_models"] = defaults["agent_models"]
+    for key, old_defaults in PRE_MODEL_REVIEWERS.items():
+        if config[key] == old_defaults:
+            config[key] = defaults[key]
+    return (json.dumps(config, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def install(checkout):
@@ -103,7 +135,11 @@ def install(checkout):
                              for name, content in ENTRY_FILES.items()})
         for destination, source in destinations.items():
             if destination.is_file():
-                continue  # Preserve installed checks, configuration and other local edits.
+                if isinstance(source, bytes):
+                    continue
+                source = upgrade_contents(destination.relative_to(root).as_posix(), destination, source)
+                if source is None:
+                    continue
             destination.parent.mkdir(parents=True, exist_ok=True)
             fd, temp_name = tempfile.mkstemp(dir=destination.parent, prefix=".install-")
             os.close(fd)

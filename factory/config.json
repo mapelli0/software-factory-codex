@@ -7,24 +7,31 @@
     "needs_info": "factory:needs-info",
     "needs_human": "factory:needs-human"
   },
+  "agent_models": {
+    "intake": "gpt-6.2-astra",
+    "intake-conversation": "gpt-6.2-astra",
+    "spec-writer": "gpt-6.2-astra",
+    "builder": "gpt-6.2-astra",
+    "approver": "gpt-6.2-astra"
+  },
   "routing": {
     "low": {
-      "code": "default"
+      "code": "gpt-6-luna"
     },
     "medium": {
-      "code": "default"
+      "code": "gpt-6.2-sol"
     },
     "high": {
-      "code": "default"
+      "code": "gpt-6.2-sol"
     }
   },
   "surface_reviewers": {
     "ui": {
-      "ux": "default",
-      "ui": "default"
+      "ux": "gpt-6.2-sol",
+      "ui": "gpt-6-luna"
     },
     "security": {
-      "security": "default"
+      "security": "gpt-6.2-astra"
     }
   },
   "protected_paths": [
