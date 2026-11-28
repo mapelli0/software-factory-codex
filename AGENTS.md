@@ -4,4 +4,4 @@ For a new installation run `python install.py "<application checkout>"` from the
 
 The Python entry points are `factory/bin/job`, `factory/bin/gate` and `factory/bin/route`. Job files and linked worktrees live in `factory/jobs/` and `.worktrees/` under the installation. The operator merges through GitHub or locally.
 
-Disconnected intake collects a brief in chat. Start the job only after `/factory execute` or `$factory execute`. Verify changes to installation or cleanup with `python -m unittest discover -s tests -v` from the source checkout.
+Free-form disconnected intake collects a brief in chat and waits for `/factory execute` or `$factory execute`. In the OpenSpec workflow, selecting an existing change for implementation starts intake for that change. Verify changes to installation or cleanup with `python -m unittest discover -s tests -v` from the source checkout.

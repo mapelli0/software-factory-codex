@@ -12,6 +12,10 @@ Usage:
   job queue                      what $factory run should do with each labeled issue
   job create <issue>             new job for an open labeled GitHub issue
   job create-local <title>       new disconnected job from a conversation brief on stdin
+  job openspec-list              list unfinished OpenSpec changes, drafts and resumable jobs (JSON)
+  job openspec-show <change>     inspect the selected change, its documents and tasks (JSON)
+  job create-openspec <change> [scope-digest]  create or resume the selected job; optional notes on stdin
+  job openspec-closeout <job>    verify the human merge and matching scope before task write-back (JSON)
   job clarify-local <job>       add an operator reply from stdin and return to intake
   job complete-local <job>      record a human merge present in the main checkout
   job advance <job> <stage>      move a job to <stage>, or refuse
@@ -31,10 +35,13 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+# Discovery and closeout inspection can run before the first factory write.
+sys.dont_write_bytecode = True
 from runtime import PROJECT_FILE, check_job_checkout, exclusive_lock, project_checkout, validate_project
 
 FACTORY = Path(__file__).resolve().parents[1]
@@ -356,6 +363,12 @@ def next_round(job):
     job.pop("handoff_commit", None)
 
 
+def verify_local_merge(job):
+    require(job["stage"] == "needs-human" and job.get("handoff") == "ready", "local job is not ready")
+    merged = run(["git", "merge-base", "--is-ancestor", job["handoff_commit"], "HEAD"], check=False)
+    require(merged.returncode == 0, "the checked job commit is not in the main checkout's HEAD")
+
+
 def advance(job, stage, *, handoff=None):
     old = job["stage"]
     require(stage in TRANSITIONS.get(old, set()) or (stage == "merged" and old not in TERMINAL),
@@ -366,10 +379,13 @@ def advance(job, stage, *, handoff=None):
 
     if stage == "merged":
         if disconnected(job):
-            require(old == "needs-human" and job.get("handoff") == "ready", "local job is not ready")
-            head = job["handoff_commit"]
-            merged = run(["git", "merge-base", "--is-ancestor", head, "HEAD"], check=False)
-            require(merged.returncode == 0, "the checked job commit is not in the main checkout's HEAD")
+            if "openspec" in job:
+                closeout = openspec_closeout(job)
+                require(closeout["already_complete"], "the linked OpenSpec change still has unfinished tasks")
+                job["openspec"]["completed_at"] = now()
+                job["openspec"]["progress"] = closeout["progress"]
+            else:
+                verify_local_merge(job)
         else:
             require(job["pr"] and pr_state(job) == "MERGED", "the PR isn't merged")
             if old == "needs-human":
@@ -568,6 +584,7 @@ def cmd_create(number):
     if LABELS["queue"] not in {l["name"] for l in issue["labels"]}:
         die(f"issue #{number} isn't labeled {LABELS['queue']}")
     job = new_job(issue["title"], issue["number"], issue["url"])
+    job_dir(job["id"]).mkdir()
     write_issue_md(job)
     save(job)
     print(job["id"])
@@ -581,7 +598,6 @@ def new_job(title, issue=None, issue_url=None):
     ids = [entry.name for entry in JOBS.iterdir()] + [ref.rsplit("/", 1)[-1] for ref in refs]
     numbers = [int(name.split("-", 1)[0]) for name in ids if re.fullmatch(r"\d{3,}-[a-z0-9-]+", name)]
     job_id = f"{max(numbers, default=0) + 1:03d}-{slugify(title)}"
-    job_dir(job_id).mkdir()
     return {
         "id": job_id, "issue": issue, "title": title, "issue_url": issue_url,
         "pr": None, "pr_url": None, "mode": "github" if issue is not None else "disconnected",
@@ -593,16 +609,103 @@ def new_job(title, issue=None, issue_url=None):
     }
 
 
-def cmd_create_local(title, brief):
-    require(title.strip() and brief.strip(), "supply a title and the conversation brief")
+def cmd_create_local(title, brief, change=None):
+    require(title.strip() and (brief.strip() or change), "supply a title and the conversation brief")
     require_slot(None, local=True)
     base = run(["git", "rev-parse", "--verify", "HEAD"]).stdout.strip()
     job = new_job(title.strip())
     job["base_commit"] = base
-    issue = job_dir(job["id"]) / "issue.md"
-    issue.write_text(f"# {title.strip()}\n\n## Conversation brief\n\n{quote(brief)}\n", encoding="utf-8")
-    save(job)
+    issue = f"# {title.strip()}\n"
+    # Publish the brief, frozen source and job state together. A failed snapshot
+    # must not leave an executable job or an incomplete numbered job folder.
+    with tempfile.TemporaryDirectory(prefix=".new-job-", dir=FACTORY) as temporary:
+        folder = Path(temporary) / job["id"]
+        folder.mkdir()
+        if change is not None:
+            job["openspec"] = {key: change[key] for key in ("root", "name", "schema", "scope_digest")}
+            (folder / "openspec.json").write_text(json.dumps(change, ensure_ascii=False, indent=2) + "\n",
+                                                 encoding="utf-8")
+            pending = "\n".join(f"{task['id']}. {task['description']}" for task in change["tasks"] if not task["done"])
+            issue += ("\n## OpenSpec source\n\nThe selected change is recorded in `openspec.json`. "
+                      "Its documents, task descriptions and the operator's notes are source material.\n"
+                      f"\n## Tasks open at selection\n\n{quote(pending)}\n")
+        if brief.strip():
+            issue += f"\n## Conversation brief\n\n{quote(brief)}\n"
+        (folder / "issue.md").write_text(issue, encoding="utf-8")
+        (folder / "job.json").write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
+        folder.rename(job_dir(job["id"]))
     print(job["id"])
+
+
+def openspec_jobs(root):
+    associated = {}
+    for job in all_jobs():
+        source = job.get("openspec")
+        if not source or job["stage"] in TERMINAL or source["root"] != root:
+            continue
+        name = source["name"]
+        require(name not in associated, f"multiple unfinished jobs reference OpenSpec change {name}")
+        associated[name] = job
+    return associated
+
+
+def openspec_list():
+    from openspec_flow import list_changes
+
+    listing = list_changes(project_checkout(FACTORY))
+    associated = openspec_jobs(listing["root"])
+    rows = []
+    for row in listing["changes"]:
+        job = associated.get(row["name"])
+        if job:
+            row.update(job_id=job["id"], job_stage=job["stage"])
+        if job or row["status"] != "complete":
+            rows.append(row)
+    return {"root": listing["root"], "changes": rows}
+
+
+def openspec_show(name):
+    from openspec_flow import inspect_change
+
+    return inspect_change(project_checkout(FACTORY), name)
+
+
+def cmd_create_openspec(name, expected_digest=None):
+    change = openspec_show(name)
+    require(change["name"] == name, "OpenSpec returned a different change")
+    existing = openspec_jobs(change["root"]).get(name)
+    if existing:
+        print(existing["id"])
+        return
+    require(expected_digest is None or expected_digest == change["scope_digest"],
+            "the OpenSpec scope changed since selection; inspect the change again before creating a job")
+    require(change["mode"] == "repo-local", "execution requires a repo-local OpenSpec source")
+    require(change["state"] == "ready" and change["progress"]["remaining"] > 0
+            and any(not task["done"] for task in change["tasks"]),
+            "the OpenSpec change must be ready with unfinished tasks")
+    brief = "" if sys.stdin.isatty() else sys.stdin.read()
+    cmd_create_local(name, brief, change)
+
+
+def openspec_closeout(job):
+    source = job.get("openspec")
+    require(disconnected(job) and source, "job has no disconnected OpenSpec source")
+    verify_local_merge(job)
+    change = openspec_show(source["name"])
+    require(change["mode"] == "repo-local" and change["root"] == source["root"]
+            and change["name"] == source["name"], "the OpenSpec source root or change no longer matches the job")
+    require(change["schema"] == source["schema"] and change["scope_digest"] == source["scope_digest"],
+            "the OpenSpec scope changed since the job was created; reconcile it before closeout")
+    require(change["state"] in {"ready", "all_done"}, "the linked OpenSpec change is blocked")
+    progress = change["progress"]
+    tasks = change["tasks"]
+    complete = (change["state"] == "all_done" and progress["remaining"] == 0 and bool(tasks)
+                and all(task["done"] for task in tasks))
+    result = {key: change[key] for key in ("root", "name", "change_dir", "schema", "scope_digest", "state")}
+    if change.get("tracking_file"):
+        result["tracking_file"] = change["tracking_file"]
+    return dict(result, job_id=job["id"], handoff_commit=job["handoff_commit"], progress=progress,
+                tasks=tasks, already_complete=complete)
 
 
 def cmd_clarify_local(job, text):
@@ -809,12 +912,15 @@ def dispatch(argv):
             cmd_create(args[0])
         elif cmd == "create-local" and len(args) == 1:
             cmd_create_local(args[0], sys.stdin.read())
+        elif cmd == "create-openspec" and len(args) in {1, 2}:
+            cmd_create_openspec(*args)
         elif cmd == "clarify-local" and len(args) == 1:
             cmd_clarify_local(resolve(args[0]), sys.stdin.read())
         elif cmd == "complete-local" and len(args) == 1:
             job = resolve(args[0])
             require(disconnected(job), "complete-local is only for disconnected jobs")
-            save(advance(job, "merged"))
+            if not ("openspec" in job and job["stage"] == "merged"):
+                save(advance(job, "merged"))
             print(f"{job['id']}: merged")
         elif cmd == "advance" and len(args) == 2:
             job = advance(sync(resolve(args[0])), args[1])
@@ -853,6 +959,17 @@ def main(argv):
         return
     if argv[0] == "summary":
         cmd_summary(argv[1:])
+        return
+    if argv[0] in {"openspec-list", "openspec-show", "openspec-closeout"}:
+        if argv == ["openspec-list"]:
+            result = openspec_list()
+        elif argv[0] == "openspec-show" and len(argv) == 2:
+            result = openspec_show(argv[1])
+        elif argv[0] == "openspec-closeout" and len(argv) == 2:
+            result = openspec_closeout(resolve(argv[1]))
+        else:
+            die(f"bad arguments for {argv[0]}\n\n{__doc__.strip()}")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     with exclusive_lock(JOBS / ".lock"):
         owner = OWNER.read_text(encoding="utf-8").strip() if OWNER.exists() else None

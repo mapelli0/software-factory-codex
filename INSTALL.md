@@ -74,7 +74,19 @@ codex -C "C:\Projects\My App"
 
 Codex looks for repository skills in the working folder and its ancestors. A chat opened in a parent folder cannot discover a child application's skill. If the entry exists at `.agents/skills/factory/SKILL.md` and the picker still shows the old list, restart Codex and reopen the application's Git root.
 
-Use `$factory dashboard` for this project's local board or `$factory` to choose GitHub or disconnected intake. Disconnected intake waits for `/factory execute` or `$factory execute`. GitHub and Git operations use the permissions of the current session.
+Use `$factory dashboard` for this project's local board or `$factory` to choose GitHub, free-form intake or OpenSpec. Free-form intake waits for `/factory execute` or `$factory execute`. GitHub and Git operations use the permissions of the current session.
+
+## Use an existing OpenSpec change
+
+In an application that uses the OpenSpec CLI and its Codex skills, open the application's Git root and enter `$factory openspec`. Choose a feature by number or exact change ID. You can also enter `$factory openspec add-export` to select an existing change directly. The factory uses the planning root OpenSpec resolves for that checkout, including a plan kept in a parent repository. OpenSpec is optional for GitHub and conversation jobs.
+
+The menu shows task progress and drafts that still need planning. Selection starts intake for that feature. The intake agent reads the existing OpenSpec artifacts and asks about unresolved requirements. An existing factory job resumes from its saved stage. Implementation uses a local job branch, with the usual checks, reviews and human merge. After merging, return to the factory chat and say which job you merged. The factory verifies the reviewed commit and uses the project's OpenSpec apply skill to mark the evidenced tasks complete in the original plan. A change in requirements or outstanding verification keeps the job open. Archiving and syncing delta specs are separate OpenSpec operations.
+
+To add this workflow to an existing installation, rerun the latest factory installer for the project. If it reports a customized workflow file, follow its upgrade diagnostic to retain your edits. To check discovery directly, run the following from the application root.
+
+```powershell
+python .factory/factory/bin/job openspec-list
+```
 
 ## Remove old installations
 

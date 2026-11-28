@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -32,7 +33,7 @@ class ProjectInstallTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
         else:
             self.assertNotEqual(result.returncode, 0)
-        return result.stdout.strip()
+        return (result.stdout if success else result.stderr or result.stdout).strip()
 
     def commit_application(self):
         (self.project / "AGENTS.md").write_text("Application instructions\n", encoding="utf-8")
@@ -91,6 +92,63 @@ class ProjectInstallTest(unittest.TestCase):
         self.install()
         self.assertEqual(config.read_text(), '{"local": true}')
         self.assertTrue((self.bin / "gate").is_file())
+
+    def test_workflow_upgrade_and_same_version_repair(self):
+        self.commit_application()
+        self.install()
+        receipt = self.root / ".workflow-package.json"
+        versions = json.loads(receipt.read_bytes())
+        for name in ("factory/bin/job", ".agents/skills/factory/SKILL.md"):
+            previous = f"previous package contents of {name}\n".encode()
+            versions[name] = hashlib.sha256(previous).hexdigest()
+            (self.root / name).write_bytes(previous.replace(b"\n", b"\r\n"))
+        receipt.write_text(json.dumps(versions), encoding="utf-8")
+        helper = self.bin / "openspec_flow.py"
+        helper.unlink()
+        builder = self.root / ".codex/agents/builder.toml"
+        builder.write_bytes(b"customized builder profile")
+        history = self.root / "factory/jobs/001-existing/job.json"
+        history.parent.mkdir(parents=True)
+        history.write_bytes(b"existing job")
+
+        self.install()
+        for name in versions:
+            self.assertEqual((self.root / name).read_bytes(), (SOURCE / name).read_bytes())
+        self.assertEqual(builder.read_bytes(), b"customized builder profile")
+        self.assertEqual(history.read_bytes(), b"existing job")
+
+        job = self.bin / "job"
+        job.write_bytes(b"local runtime edit after upgrading")
+        helper.unlink()
+        self.install()
+        self.assertEqual(job.read_bytes(), b"local runtime edit after upgrading")
+        self.assertTrue(helper.is_file())
+
+    def test_conflicting_workflow_files_survive_upgrade_and_are_reported_together(self):
+        self.commit_application()
+        self.install()
+        receipt = self.root / ".workflow-package.json"
+        receipt.unlink()  # Project-local releases before OpenSpec had no receipt.
+        workflow = self.root / ".agents/skills/factory/SKILL.md"
+        job = self.bin / "job"
+        helper = self.bin / "openspec_flow.py"
+        helper.unlink()
+        for path in (workflow, job):
+            path.write_bytes(b"customized factory file")
+
+        message = self.install(success=False)
+        self.assertIn("rerun the installer", message)
+        for path in (workflow, job):
+            self.assertIn(str(path), message)
+            self.assertEqual(path.read_bytes(), b"customized factory file")
+        self.assertFalse(helper.exists())
+        self.assertFalse(receipt.exists())
+
+        workflow.rename(workflow.with_suffix(".backup"))
+        job.rename(job.with_suffix(".backup"))
+        self.install()
+        self.assertTrue(helper.is_file())
+        self.assertTrue(receipt.is_file())
 
     def test_upgrade_adds_model_defaults_and_preserves_custom_routing(self):
         self.commit_application()

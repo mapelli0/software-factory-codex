@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import sys
@@ -21,13 +22,17 @@ from project_skill import ENTRY_FILES, SKILL_DIR
 
 MARKER = {"product": "software-factory-codex", "layout": "project-local-v1"}
 WORKFLOW = ".agents/skills/factory/SKILL.md"
-# Hashes of the shipped files before model and reasoning settings were added.
-UPGRADE_HASHES = {
+WORKFLOW_RECEIPT = ".workflow-package.json"
+# Install the helper before its callers. The hashes identify unmodified files
+# from the four project-local releases that predate workflow receipts.
+WORKFLOW_BASELINES = {
+    "factory/bin/openspec_flow.py": set(),
+    "factory/bin/job": {"09b8c4a08bc8257712a4be84c69336983e26cabb2a1506bc6383c71843964388"},
     WORKFLOW: {
         "5916fec498b248abe2d8404a7af0e0432db756682110f9e106e669c5057052a1",
         "ad42480f632cd68d89a8ff690e93f0386f57655f23e2b2a08770fb3610b99b67",
+        "7e044c6f3b143a64b1194ccbb504574b67283082d94303f6afd4ded411680a51",
     },
-    "factory/bin/models": {"85151792725e36779a4835e3ccb4c40e97acc2da8d9c47c5b43bdf28427a07c8"},
 }
 PRE_MODEL_REVIEWERS = {
     "routing": {risk: {"code": "default"} for risk in ("low", "medium", "high")},
@@ -36,10 +41,10 @@ PRE_MODEL_REVIEWERS = {
 ROLES = ("approver", "builder", "intake", "intake-conversation", "spec-writer",
          "reviewer-code", "reviewer-security", "reviewer-ui", "reviewer-ux")
 FILES = (
-    "AGENTS.md", "INSTALL.md", "LICENSE", WORKFLOW,
+    "AGENTS.md", "INSTALL.md", "LICENSE", *WORKFLOW_BASELINES,
     ".codex/config.toml", *(f".codex/agents/{role}.toml" for role in ROLES),
     "factory/checks.ps1", "factory/checks.sh", "factory/config.json", "factory/dashboard.html",
-    "factory/bin/job", "factory/bin/gate", "factory/bin/route", "factory/bin/models",
+    "factory/bin/gate", "factory/bin/route", "factory/bin/models",
     "factory/bin/runtime.py", "factory/bin/dashboard.py",
 )
 
@@ -74,13 +79,56 @@ def validate_skill_entry(project):
         raise ValueError(f"existing project skill at {directory}; move or rename it to install $factory")
 
 
+def digest(path):
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def workflow_updates(root, files):
+    """Plan the new helper, command and instructions together before replacing any file."""
+    receipt = root / WORKFLOW_RECEIPT
+    previous = {}
+    if receipt.exists():
+        try:
+            previous = json.loads(receipt.read_text(encoding="utf-8"))
+        except ValueError as error:
+            raise ValueError(f"invalid workflow receipt at {receipt}: {error}") from error
+        if (not isinstance(previous, dict) or set(previous) != set(WORKFLOW_BASELINES)
+                or not all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+                           for value in previous.values())):
+            raise ValueError(f"unrecognized workflow receipt at {receipt}; inspect it before reinstalling")
+
+    bundled = {}
+    updates = {}
+    conflicts = []
+    for name, old_hashes in WORKFLOW_BASELINES.items():
+        target = root / name
+        bundled[name] = digest(files[name])
+        if not target.exists():
+            updates[target] = files[name]
+            continue
+        actual = digest(target)
+        if actual == bundled[name]:
+            continue
+        if actual in old_hashes or actual == previous.get(name):
+            updates[target] = files[name]
+        elif previous.get(name) != bundled[name]:
+            conflicts.append(str(target))
+    if conflicts:
+        raise ValueError("OpenSpec upgrade needs a manual merge. Back up and move the following "
+                         "customized files aside, rerun the installer, then merge your edits "
+                         "into the installed versions:\n  " + "\n  ".join(conflicts))
+    if previous != bundled:
+        updates[receipt] = (json.dumps(bundled, indent=2) + "\n").encode("utf-8")
+    return updates
+
+
 def upgrade_contents(name, installed, bundled):
     """Update stock files and add missing settings while preserving local choices."""
-    if name in UPGRADE_HASHES:
-        contents = installed.read_bytes().replace(b"\r\n", b"\n")
-        if hashlib.sha256(contents).hexdigest() in UPGRADE_HASHES[name]:
+    if name == "factory/bin/models":
+        installed_digest = digest(installed)
+        if installed_digest == "85151792725e36779a4835e3ccb4c40e97acc2da8d9c47c5b43bdf28427a07c8":
             return bundled
-        if contents != bundled.read_bytes().replace(b"\r\n", b"\n"):
+        if installed_digest != digest(bundled):
             print(f"Kept customized file at {installed}. See {bundled} for the current model and reasoning settings.")
     if name != "factory/config.json":
         return None
@@ -130,7 +178,7 @@ def install(checkout):
     check_destination(lock)
     with exclusive_lock(lock):
         validate_skill_entry(project)
-        for name in (".gitignore", *files):
+        for name in (".gitignore", WORKFLOW_RECEIPT, *files):
             path = root
             for part in Path(name).parts:
                 path = path / part
@@ -138,18 +186,23 @@ def install(checkout):
             if path.exists() and not path.is_file():
                 raise ValueError(f"expected a regular file at {path}")
 
-        destinations = {root / ".gitignore": b"*\n"}
-        destinations.update({root / name: source for name, source in files.items()})
-        # Publish the picker entry only after its full workflow is ready.
-        destinations.update({project / SKILL_DIR / name: content.encode("utf-8")
-                             for name, content in ENTRY_FILES.items()})
-        for destination, source in destinations.items():
+        destinations = workflow_updates(root, files)
+        if not (root / ".gitignore").is_file():
+            destinations[root / ".gitignore"] = b"*\n"
+        for name, source in files.items():
+            if name in WORKFLOW_BASELINES:
+                continue
+            destination = root / name
             if destination.is_file():
-                if isinstance(source, bytes):
-                    continue
-                source = upgrade_contents(destination.relative_to(root).as_posix(), destination, source)
-                if source is None:
-                    continue
+                source = upgrade_contents(name, destination, source)
+            if source is not None:
+                destinations[destination] = source
+        # Publish the picker entry only after its full workflow is ready.
+        for name, content in ENTRY_FILES.items():
+            destination = project / SKILL_DIR / name
+            if not destination.is_file():
+                destinations[destination] = content.encode("utf-8")
+        for destination, source in destinations.items():
             destination.parent.mkdir(parents=True, exist_ok=True)
             fd, temp_name = tempfile.mkstemp(dir=destination.parent, prefix=".install-")
             os.close(fd)

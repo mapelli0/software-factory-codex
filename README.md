@@ -25,6 +25,7 @@ Open a chat in that same application folder, or start `codex` there in a termina
 
 - **GitHub.** Label an open issue `factory`, then enter `$factory run 42` for issue 42 or `$factory run` for the queue. The factory hands you a reviewed PR to merge.
 - **Disconnected.** Describe the request in chat, then send `/factory execute` or `$factory execute` when the brief is ready. The factory hands you a reviewed local branch.
+- **OpenSpec.** Enter `$factory openspec` to list this project's open changes and choose one, or enter `$factory openspec <change-id>`. Intake reads the existing proposal, scenarios and tasks and asks about any gaps. The factory builds and reviews the change on a local branch. After you merge, tell the factory so it can verify the merge and mark the evidenced tasks complete through OpenSpec. The change stays available for a separate archive decision. [OpenSpec setup and usage](INSTALL.md#use-an-existing-openspec-change)
 
 Use `$factory dashboard` to open this project's board. [Setup and validation](INSTALL.md) · [Runtime design](DESIGN.md) · [Example jobs](examples/jobs)
 
